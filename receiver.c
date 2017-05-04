@@ -241,6 +241,8 @@ void checkMsgAndSendAck (ListHead * head, DataHeader * incommingMsg, DataHeader 
 		{
 				//Här har ja problem
 			case 1:
+				//om de låg på correkt index så denna på 0 så skulle det bara vara att plocka dem från arrayen
+				//nu måste vi köra forloop :/
 				break;
 			case 2:
 				break;
