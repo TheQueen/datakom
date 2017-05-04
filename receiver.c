@@ -239,6 +239,7 @@ void checkMsgAndSendAck (ListHead * head, DataHeader * incommingMsg, DataHeader 
 		addNodeToList( head, incommingMsg);
 		switch (*winCounter)
 		{
+				//Här har ja problem
 			case 1:
 				break;
 			case 2:
