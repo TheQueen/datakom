@@ -15,7 +15,7 @@
 #define PORT 5555
 #define HOST_NAME_LENGTH 50
 #define BUFSIZE 2048
-
+#define WINDOWSIZE 3 
 
 
 //ListFuncs and struct
@@ -42,9 +42,14 @@ int searchList(ListNode * node, int seqNr); // -1 = no 1 = yes
 //funcs for socket things
 int createSock();
 void initSock(struct sockaddr_in *myaddr, int fd, int port);
-void checkMsgAndSendAck (ListHead * head, DataHeader * incommingMsg, DataHeader * outgoingMsg, int fd, struct sockaddr_in remaddr, socklen_t addrlen); 
+void checkMsgAndSendAck (ListHead * head, DataHeader * incommingMsg, DataHeader * outgoingMsg, int fd, struct sockaddr_in remaddr, socklen_t addrlen, int * winCounter); 
 void createDataHeader(int flags, int id, int seq, int windowsize, int crc, char * data, DataHeader * head ); 
+void fillArrWithSeq0();
+int emptyArrIndex();
+void addToArr(DataHeader * incommingMsg, int * winCounter);
+//global variables 
 
+DataHeader window[WINDOWSIZE]; 
 
 //void * startUpFunc ()
 int main(int argc, char *argv[])
@@ -52,6 +57,12 @@ int main(int argc, char *argv[])
 	DataHeader * incommingMsg; 
 	ListHead * head = createListHead();
 	DataHeader * outgoingMsg;
+	int winCounter = 0;
+	int nextInSeq; 
+	int index;
+	int msgInBuff = 0; 
+	int returnValue; 
+	fillArrWithSeq0();
     
 	//Create socket
 	int fd;
@@ -59,8 +70,6 @@ int main(int argc, char *argv[])
     //For responding
     struct sockaddr_in remaddr;     /* remote address */
     socklen_t addrlen = sizeof(remaddr);            /* length of addresses */
-    int recvlen;                    /* # bytes received */
-    unsigned char buf[BUFSIZE];     /* receive buffer */
 
     fd = createSock();
     initSock(&sock, fd, PORT);
@@ -87,27 +96,77 @@ int main(int argc, char *argv[])
 			{
 				//received syn
 				case 0: 
-					 createDataHeader(1, incommingMsg->id, incommingMsg->seq, 3, 0, "This is a SYNACK", outgoingMsg);//creating outgoingMsg
-					 checkMsgAndSendAck (head, incommingMsg,outgoingMsg, fd, remaddr, addrlen);
+					createDataHeader(1, 353/*insert unic id*/, incommingMsg->seq, 3, 0, "This is a SYNACK", outgoingMsg);//creating outgoingMsg
+					returnValue = sendto(fd, outgoingMsg, sizeof(*outgoingMsg), 0, (struct sockaddr *)&remaddr, &addrlen);
+					//error check
+					if (!returnValue )
+					{
+						printf("Error from send SYNACK %s: %s\n", outgoingMsg->data, strerror(errno) ); 
+						exit(EXIT_FAILURE); 
+					}
+					nextInSeq = incommingMsg->seq + 1;
+					index = emptyArrIndex();
+					window[index] = *incommingMsg; 
+					strcpy(window[index].data, incommingMsg->data);
+					winCounter = winCounter + 1;
 					break; 
 					
 				//recived ack on syn-ack
 				case 1:
 					//add msg to list 
 					//this is the final part of the handshake therefore on ack
-					addNodeToList( head, incommingMsg);
+					window[index].seq = 0;
+					winCounter = winCounter - 1;
+					//addNodeToList( head, incommingMsg);
 					break;
 					
 				//received new msg
 				case 2:
+					if(winCounter == 3)
+					{
+						break;
+					}
+					
 					createDataHeader(2, incommingMsg->id, incommingMsg->seq, 3, 0, "This is an ACK", outgoingMsg); //creating outgoingMsg
-					 checkMsgAndSendAck (head, incommingMsg, outgoingMsg, fd, remaddr, addrlen);
+					
+					if(incommingMsg->seq == nextInSeq+1)
+					{
+						addToArr(incommingMsg, &winCounter);
+						msgInBuff = msgInBuff+1; 
+						//send ack
+						returnValue = sendto(fd, outgoingMsg, sizeof(*outgoingMsg), 0, (struct sockaddr *)&remaddr, &addrlen); 	
+
+						//error check
+						if (!returnValue )
+						{
+							printf("Error from send ack %s: %s\n", outgoingMsg->data, strerror(errno) ); 
+							exit(EXIT_FAILURE); 
+						}
+					}
+					else if(incommingMsg->seq == nextInSeq+2)
+					{
+						addToArr(incommingMsg, &winCounter);
+						msgInBuff = msgInBuff + 2; 
+						//send ack
+						returnValue = sendto(fd, outgoingMsg, sizeof(*outgoingMsg), 0, (struct sockaddr *)&remaddr, &addrlen); 	
+
+						//error check
+						if (!returnValue )
+						{
+							printf("Error from send ack %s: %s\n", outgoingMsg->data, strerror(errno) ); 
+							exit(EXIT_FAILURE); 
+						}
+					}
+					else
+					{
+						checkMsgAndSendAck (head, incommingMsg, outgoingMsg, fd, remaddr, addrlen, &winCounter);
+					}
 					break; 
 					
 				// received fin
 				case 3:
 					createDataHeader(4, incommingMsg->id, incommingMsg->seq, 3, 0, "This is a FINACK", outgoingMsg); //creating outgoingMsg
-					 checkMsgAndSendAck (head, incommingMsg, outgoingMsg, fd, remaddr, addrlen);
+					checkMsgAndSendAck (head, incommingMsg, outgoingMsg, fd, remaddr, addrlen, &winCounter);
 					break; 
 					
 				//recived fin ack
@@ -170,14 +229,32 @@ void createDataHeader(int flags, int id, int seq, int windowsize, int crc, char 
 }
 
 //check if msg is dup and send ack
-void checkMsgAndSendAck (ListHead * head, DataHeader * incommingMsg, DataHeader * outgoingMsg, int fd, struct sockaddr_in remaddr, socklen_t addrlen)
+void checkMsgAndSendAck (ListHead * head, DataHeader * incommingMsg, DataHeader * outgoingMsg, int fd, struct sockaddr_in remaddr, socklen_t addrlen, int * winCounter)
 {
 	int returnValue; 
-	if (searchList(head->head, incommingMsg->seq) == -1) // == its not a repeated msg add it to the list
+	int searchReturn = searchList(head->head, incommingMsg->seq);
+	if ( searchReturn == -1) // == its not a repeated msg add it to the list
 	{
 		//add msg to list
 		addNodeToList( head, incommingMsg);
+		switch (*winCounter)
+		{
+			case 1:
+				break;
+			case 2:
+				break;
+			case 3:
+				break; 
+			default:
+				break;
+				
+		}
 	}
+	else if (searchReturn == -35)
+	{
+		printf("Something is wrong in the search function");
+	}
+	
 	//send ack
 	returnValue = sendto(fd, outgoingMsg, sizeof(*outgoingMsg), 0, (struct sockaddr *)&remaddr, &addrlen); 	
 	
@@ -187,11 +264,42 @@ void checkMsgAndSendAck (ListHead * head, DataHeader * incommingMsg, DataHeader 
 		printf("Error from send ack %s: %s\n", outgoingMsg->data, strerror(errno) ); 
 		exit(EXIT_FAILURE); 
 	}
-	else if (returnValue == -35)
+	
+}
+
+//to fill arr with "Empty" dataHeaders
+void fillArrWithSeq0()
+{
+	int i = 0; 
+	for (i = 0; i<WINDOWSIZE;i++)
 	{
-		printf("Something is wrong in the search function");
+		window[i].seq = 0;
 	}
 }
+
+//find an empty index
+int emptyArrIndex()
+{
+	int i = 0;
+	for(i = 0; i < WINDOWSIZE; i++)
+	{
+		if(window[i].seq == 0)
+		{
+			return i; 
+		}
+	}
+	exit(EXIT_FAILURE);
+}
+
+//
+void addToArr(DataHeader * incommingMsg, int * winCounter)
+{
+	int index = emptyArrIndex();
+	window[index] = *incommingMsg; 
+	strcpy(window[index].data, incommingMsg->data);
+	*winCounter = (*winCounter) + 1;
+}
+
 
 
 //ListFuncs
@@ -216,7 +324,8 @@ ListNode * createListNode(DataHeader * msg)
 		printf("Cant malloc node: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	node->msg = *msg; 
+	node->msg = *msg;
+	strcpy(node->msg.data, msg->data);
 	node->next = NULL; 
 	return node; 
 }
