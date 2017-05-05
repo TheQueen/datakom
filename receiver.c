@@ -17,42 +17,42 @@
 #define BUFSIZE 2048
 
 
-
+// wefwhhwrh stuff just trying
 //ListFuncs and struct
-typedef struct ListNode ListNode; 
+typedef struct ListNode ListNode;
 
 struct ListNode
 {
-	DataHeader msg; 
-	ListNode * next; 
-}; 
+	DataHeader msg;
+	ListNode * next;
+};
 
 typedef struct ListHead
 {
-	ListNode * head; 
-}ListHead; 
+	ListNode * head;
+}ListHead;
 
 
-ListHead * createListHead(); 
+ListHead * createListHead();
 ListNode * createListNode(DataHeader * msg);
 void addNodeToList(ListHead * head, DataHeader * msg);
-void removeAllNodesFromList(ListHead * head); 
+void removeAllNodesFromList(ListHead * head);
 int searchList(ListNode * node, int seqNr); // -1 = no 1 = yes
 
 //funcs for socket things
 int createSock();
 void initSock(struct sockaddr_in *myaddr, int fd, int port);
-void checkMsgAndSendAck (ListHead * head, DataHeader * incommingMsg, DataHeader * outgoingMsg, int fd, struct sockaddr_in remaddr, socklen_t addrlen); 
-void createDataHeader(int flags, int id, int seq, int windowsize, int crc, char * data, DataHeader * head ); 
+void checkMsgAndSendAck (ListHead * head, DataHeader * incommingMsg, DataHeader * outgoingMsg, int fd, struct sockaddr_in remaddr, socklen_t addrlen);
+void createDataHeader(int flags, int id, int seq, int windowsize, int crc, char * data, DataHeader * head );
 
 
 //void * startUpFunc ()
 int main(int argc, char *argv[])
 {
-	DataHeader * incommingMsg; 
+	DataHeader * incommingMsg;
 	ListHead * head = createListHead();
 	DataHeader * outgoingMsg;
-    
+
 	//Create socket
 	int fd;
     struct sockaddr_in sock;
@@ -66,54 +66,54 @@ int main(int argc, char *argv[])
     initSock(&sock, fd, PORT);
 
     printf("Socket created and initiated!\n");
-	
-	
-	
-	while (1) 
+
+
+
+	while (1)
 	{
 		int msgRecv = recvfrom(fd, incommingMsg, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, &addrlen);
-		
+
 		//error check
 		if (!msgRecv)
 		{
-		    printf("Error from listen for syn: %s\n", strerror(errno) ); 
-		    return EXIT_FAILURE; 
+		    printf("Error from listen for syn: %s\n", strerror(errno) );
+		    return EXIT_FAILURE;
 		}
-		
-		else 
+
+		else
 		{
-		    //check data 
+		    //check data
 			switch (incommingMsg->flags)
 			{
 				//received syn
-				case 0: 
+				case 0:
 					 createDataHeader(1, incommingMsg->id, incommingMsg->seq, 3, 0, "This is a SYNACK", outgoingMsg);//creating outgoingMsg
 					 checkMsgAndSendAck (head, incommingMsg,outgoingMsg, fd, remaddr, addrlen);
-					break; 
-					
+					break;
+
 				//recived ack on syn-ack
 				case 1:
-					//add msg to list 
+					//add msg to list
 					//this is the final part of the handshake therefore on ack
 					addNodeToList( head, incommingMsg);
 					break;
-					
+
 				//received new msg
 				case 2:
 					createDataHeader(2, incommingMsg->id, incommingMsg->seq, 3, 0, "This is an ACK", outgoingMsg); //creating outgoingMsg
 					 checkMsgAndSendAck (head, incommingMsg, outgoingMsg, fd, remaddr, addrlen);
-					break; 
-					
+					break;
+
 				// received fin
 				case 3:
 					createDataHeader(4, incommingMsg->id, incommingMsg->seq, 3, 0, "This is a FINACK", outgoingMsg); //creating outgoingMsg
 					 checkMsgAndSendAck (head, incommingMsg, outgoingMsg, fd, remaddr, addrlen);
-					break; 
-					
+					break;
+
 				//recived fin ack
 				case 4:
-					//? 
-					break; 
+					//?
+					break;
 			}
 		}
 	}
@@ -160,32 +160,32 @@ void initSock(struct sockaddr_in *myaddr, int fd, int port)
 //creates msg
 void createDataHeader(int flags, int id, int seq, int windowsize, int crc, char * data , DataHeader * head)
 {
-	head->flags = flags; 
-	head->id = id; 
-	head->seq = seq; 
-	head->windowsize = windowsize; 
+	head->flags = flags;
+	head->id = id;
+	head->seq = seq;
+	head->windowsize = windowsize;
 	head->crc = crc;
 	head->data = data;
-	 
+
 }
 
 //check if msg is dup and send ack
 void checkMsgAndSendAck (ListHead * head, DataHeader * incommingMsg, DataHeader * outgoingMsg, int fd, struct sockaddr_in remaddr, socklen_t addrlen)
 {
-	int returnValue; 
+	int returnValue;
 	if (searchList(head->head, incommingMsg->seq) == -1) // == its not a repeated msg add it to the list
 	{
 		//add msg to list
 		addNodeToList( head, incommingMsg);
 	}
 	//send ack
-	returnValue = sendto(fd, outgoingMsg, sizeof(*outgoingMsg), 0, (struct sockaddr *)&remaddr, &addrlen); 	
-	
+	returnValue = sendto(fd, outgoingMsg, sizeof(*outgoingMsg), 0, (struct sockaddr *)&remaddr, &addrlen);
+
 	//error check
 	if (!returnValue )
 	{
-		printf("Error from send ack %s: %s\n", outgoingMsg->data, strerror(errno) ); 
-		exit(EXIT_FAILURE); 
+		printf("Error from send ack %s: %s\n", outgoingMsg->data, strerror(errno) );
+		exit(EXIT_FAILURE);
 	}
 	else if (returnValue == -35)
 	{
@@ -198,45 +198,45 @@ void checkMsgAndSendAck (ListHead * head, DataHeader * incommingMsg, DataHeader 
 
 ListHead * createListHead()
 {
-	ListHead * head; 
-	if ((head = (ListHead *)malloc(sizeof(ListHead))) == NULL) 
+	ListHead * head;
+	if ((head = (ListHead *)malloc(sizeof(ListHead))) == NULL)
 	{
 		printf("Cant malloc ListHead: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	head->head = NULL; 
-	return head; 
+	head->head = NULL;
+	return head;
 }
 
 ListNode * createListNode(DataHeader * msg)
 {
-	ListNode * node; 
-	if((node = (ListNode * )malloc(sizeof(ListNode)))== NULL) 
+	ListNode * node;
+	if((node = (ListNode * )malloc(sizeof(ListNode)))== NULL)
 	{
 		printf("Cant malloc node: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	node->msg = *msg; 
-	node->next = NULL; 
-	return node; 
+	node->msg = *msg;
+	node->next = NULL;
+	return node;
 }
 
 void addNodeToList(ListHead * head, DataHeader * msg)
 {
 	ListNode * temp = head->head;
 	head->head = createListNode(msg);
-	head->head->next = temp; 
-	
+	head->head->next = temp;
+
 }
 
 void removeAllNodesFromList(ListHead * head)
 {
 	while (head->head != NULL)
 	{
-		ListNode * temp = head->head->next; 
+		ListNode * temp = head->head->next;
 		free(head->head);
 		head->head = temp;
-		removeAllNodesFromList(head); 
+		removeAllNodesFromList(head);
 	}
 }
 
@@ -244,15 +244,15 @@ int searchList(ListNode * node, int seqNr)
 {
 	if(node == NULL)
 	{
-		return -1; 
+		return -1;
 	}
 	else if (node->msg.seq == seqNr)
 	{
-		return 1; 
+		return 1;
 	}
-	else 
+	else
 	{
 		searchList(node->next, seqNr);
 	}
-	return -35; 
+	return -35;
 }
