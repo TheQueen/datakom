@@ -1,8 +1,10 @@
 #include "header.h"
+
 #include <pthread.h>
 #include <time.h>
 #include <stdio.h>
 #include <errno.h>
+
 
 void createDataHeader(int flags, int id, int seq, int windowsize, int crc, char * data , DataHeader * head)
 {
@@ -13,6 +15,7 @@ void createDataHeader(int flags, int id, int seq, int windowsize, int crc, char 
 	head->crc = crc;
 	head->data = data;
 }
+
 
 //timerfuncs
 
@@ -54,3 +57,4 @@ clock_t roundTripTime = end - start;
 
 
 */
+
