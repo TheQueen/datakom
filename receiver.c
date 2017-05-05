@@ -16,6 +16,7 @@
 #define HOST_NAME_LENGTH 50
 #define BUFSIZE 2048
 
+//hello master
 
 //ListFuncs and struct
 typedef struct ListNode ListNode;
