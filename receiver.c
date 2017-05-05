@@ -17,7 +17,6 @@
 #define BUFSIZE 2048
 
 
-// wefwhhwrh stuff just trying
 //ListFuncs and struct
 typedef struct ListNode ListNode;
 
@@ -254,5 +253,6 @@ int searchList(ListNode * node, int seqNr)
 	{
 		searchList(node->next, seqNr);
 	}
+
 	return -35;
 }
