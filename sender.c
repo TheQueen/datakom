@@ -8,11 +8,19 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <pthread.h>
+#include "header.h"
 
 #define PORT 5555
 #define HOST_NAME_LENGTH 50
 #define BUFSIZE 2048
 
+//Global to be able to change value in different threads
+int freeWindowSlots = 0;
+
+//Skapa syn
+//Skapa synackack
+//Skapa array med meddelanden
+//
 
 
 //int threadCreate (void * functionCall, int threadParam, void * args);
@@ -22,7 +30,7 @@ void initSock(struct sockaddr_in *myaddr, int fd, int port, char *host);
 int main(int argc, char *argv[])
 {
     int fd;
-	int flag = 0; 
+    int windowSize = 0;
     struct sockaddr_in sock;
     char *my_message = "Hello server!\n";
     char hostName[HOST_NAME_LENGTH];
@@ -43,31 +51,28 @@ int main(int argc, char *argv[])
 
     printf("Socket created and initiated!\n");
 
-	while(1)
-	{
-		switch (flag)
-		{
-			case 0:
-				break; 
-			case 1: 
-				break;
-			case 2: 
-				break; 
-			case 3: 
-				break; 
-			case 4:
-				break; 
-		}
-	}
- 	/*if (windowsize != 3 && syn == 1)
-		{
-			/* send a message to the server */
-			/*if (sendto(fd, my_message, strlen(my_message), 0, (struct sockaddr *)&sock, sizeof(sock)) < 0)
-			{
-				perror("sendto failed");
-				return 0;
-			}
-		}*/
+    /////////////////////a work in progress///////////////////////////////
+    DataHeader * syn;
+    void createDataHeader(0, 0, 0, 0, 0, "", syn);
+    //set windowsize to what you get in synAck
+    windowSize = 3;
+    freeWindowSlots = 3;
+    //make user interactive input later
+    DataHeader * message[8];
+    void createDataHeader(2, 0, 1, windowSize, 0, "Hej ", message[0]);
+    void createDataHeader(2, 0, 2, windowSize, 0, "hur ", message[1]);
+    void createDataHeader(2, 0, 3, windowSize, 0, "mår ", message[2]);
+    void createDataHeader(2, 0, 5, windowSize, 0, "du? ", message[3]);
+    void createDataHeader(2, 0, 1, windowSize, 0, "Hej ", message[4]);
+    void createDataHeader(2, 0, 2, windowSize, 0, "hur ", message[5]);
+    void createDataHeader(2, 0, 3, windowSize, 0, "mår ", message[6]);
+    void createDataHeader(2, 0, 5, windowSize, 0, "du? ", message[7]);
+
+    //////////////////////////////////////////////////////////
+
+    printf("Did some stuff!\n");
+
+
     return (EXIT_SUCCESS);
 }
 
@@ -116,10 +121,51 @@ void initSock(struct sockaddr_in *myaddr, int fd, int port, char *host)
     // }
 }
 
+void * sendThread(void * arg)
+{
+  for(int i = 0; i<8; i++)
+  {
+    if(freeWindowSlots > 0)
+    {
+      /* send a message to the server */
+      if (sendto(fd, msgHeader, sizeof(*msgHeader), 0, (struct sockaddr *)&sock, sizeof(sock)) < 0)
+      {
+        perror("sendto failed");
+        return 0;
+      }
+    }
+  }
+}
 
+void * receiveThread(void * arg)
+{
+  while(1)
+  {
+    switch (flag)
+    {
+      case 0:
+        break;
+      case 1:
+        break;
+      case 2:
+        break;
+      case 3:
+        break;
+      case 4:
+        break;
+    }
+  }
 
-
-
+ 	/*if (windowsize != 3 && syn == 1)
+		{
+			/* send a message to the server */
+			/*if (sendto(fd, my_message, strlen(my_message), 0, (struct sockaddr *)&sock, sizeof(sock)) < 0)
+			{
+				perror("sendto failed");
+				return 0;
+			}
+		}*/
+}
 
 // int threadCreate (void * functionCall, int threadParam, void * args)
 // {
