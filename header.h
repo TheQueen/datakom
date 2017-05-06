@@ -2,19 +2,19 @@
 
 //treansport header
 
-typedef  struct header 
+typedef  struct header
 {
-	int flags;
-	int id; 
-	int seq; 
-	int windowsize; 
-	int crc; 
-	char * data; 
-} DataHeader; 
+	int flag;
+	int id;
+	int seq;
+	int windowSize;
+	int crc;
+	char data[50];
+} DataHeader;
 
-void createDataHeader(int flags, int id, int seq, int windowsize, int crc, char * data , DataHeader * head); 
+void createDataHeader(int flag, int id, int seq, int windowsize, int crc, char * data , DataHeader * head);
 
 //TimeOutFunc
 
-int startTimer (clock_t time); 
+int startTimer (clock_t time);
 void * timerThread (void * arg);
