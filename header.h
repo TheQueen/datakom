@@ -9,18 +9,19 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
-//treansport header
+//traansport header
 
 typedef  struct header 
 {
-	int flags;
+	int flag;
 	int id; 
 	int seq; 
 	int windowsize; 
 	int crc; 
-	char * data; 
+	char data[50]; 
 } DataHeader; 
 
+//struct for passing arguments in threads
 typedef struct argumetForThreads
 {
 	int fd; /*socket file descriptor*/
@@ -28,11 +29,33 @@ typedef struct argumetForThreads
     struct sockaddr_in remaddr;     /* remote address */
     socklen_t addrlen; /* length of addresses */
 	DataHeader * incommingMsg; /*buffer for incomming data*/
-	int nextInSeq; /*next seqNr that is expekted*/
+	
 }ArgForThreads; 
 
+//struct with accepted clients
+typedef struct AcceptedClients AcceptedClients;
 
-void createDataHeader(int flags, int id, int seq, int windowsize, int crc, char * data , DataHeader * head); 
+struct AcceptedClients
+{
+	struct sockaddr_in remaddr; 
+	int id; 
+	int synAckAck; 
+	int nextInSeq; /*next seqNr that is expekted*/
+	AcceptedClients * next;
+};
+
+typedef struct AccClientListHead
+{
+	AcceptedClients * head;
+}AccClientListHead; 
+
+//create transportHeader
+void createDataHeader(int flag, int id, int seq, int windowsize, int crc, char * data , DataHeader * head); 
+
+//list funcs for 
+void addClient(AccClientListHead * head, struct sockaddr_in remaddr, int id ); 
+AcceptedClients * findClient(AcceptedClients * client, struct sockaddr_in remaddr, int id );
+int removeClient(AccClientListHead * clientHead, struct sockaddr_in remaddr, int id);
 
 //TimeOutFunc
 

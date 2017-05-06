@@ -40,67 +40,92 @@ void addNodeToList(ListHead * head, DataHeader * msg);
 void removeAllNodesFromList(ListHead * head); 
 int searchList(ListNode * node, int seqNr); // -1 = no 1 = yes
 
+
 //funcs for socket things
 int createSock();
 void initSock(struct sockaddr_in *myaddr, int fd, int port);
 void checkMsgAndSendAck (ListHead * head, DataHeader * incommingMsg, DataHeader * outgoingMsg, int fd, struct sockaddr_in remaddr, socklen_t addrlen, int * winCounter); 
 void fillArrWithSeq0();
 int emptyArrIndex();
-void addToArr(DataHeader * incommingMsg, int * winCounter);
+void addToArr(DataHeader * incommingMsg, int index);
 void * listenFunc(void * args);
 void * handleMsg (void * args);
+
 
 //global variables 
 
 DataHeader window[(WINDOWSIZE-1)]; 
 ListHead * head;
+AccClientListHead * clients; 
+int msgThreadCounter; 
+int finRecived;
 
 //void * startUpFunc ()
 int main(int argc, char *argv[])
 {
 	//variables
 	head = createListHead();
-	int winCounter = 0; // behövs inte?  
 	pthread_t listener; 
 	ArgForThreads args; 
+	msgThreadCounter = 0; 
 	
 	fillArrWithSeq0();
-    
+    srand(time(NULL));
 	//Create socket
 	
     args.addrlen = sizeof(args.remaddr);           
     args.fd = createSock();
     initSock(&(args.sock), args.fd, PORT);
 
-    printf("Socket created and initiated!\n");
+    //printf("Socket created and initiated!\n");
 	
 	
+	int err = pthread_create(&listener, NULL, listenFunc, &args); 
+	if(err != 0)
+    {
+         printf ("cant create thread\n");
+     }
+     else
+     {
+         //printf ("Successfully created thread!!!\n");
+     }
 	
-	thread_create(&listener, NULL, listenFunc, &args); 
-	
+	pthread_exit(NULL);
 	return 0; 		    
 }
 
 
 void * listenFunc(void * args)
 {
+	
 	ArgForThreads * temp = (ArgForThreads*) args; 
 	struct sockaddr_in tempAddr = temp->remaddr;
 	pthread_t msg; 
+	int msgRecv;
+	finRecived = 0; 
 	while (1) 
 	{
-		int msgRecv = recvfrom(temp->fd, temp->incommingMsg, sizeof(DataHeader), 0, (struct sockaddr *)&tempAddr, (socklen_t*)&(temp->addrlen));
-		
-		//error check
-		if (!msgRecv)
+		if(finRecived && !msgThreadCounter)
 		{
-		    printf("Error from listenFunc for msg: %s\n", strerror(errno) ); 
-		   
+	
 		}
-		
-		else 
-		{ 
-			thread_create(&msg, NULL, handleMsg, args); 
+		else
+		{
+			printf("-----Listening for msgs----- \n");
+			msgRecv = recvfrom(temp->fd, temp->incommingMsg, sizeof(DataHeader), 0, (struct sockaddr *) &tempAddr, (socklen_t*)&(temp->addrlen));
+
+			//error check
+			if (!msgRecv)
+			{
+				printf("Error from listenFunc for msg: %s\n", strerror(errno) ); 
+
+			}
+
+			else 
+			{ 
+				pthread_create(&msg, NULL, handleMsg, args); 
+				msgThreadCounter = msgThreadCounter + 1;
+			}
 		}
 	}
 }
@@ -108,7 +133,98 @@ void * listenFunc(void * args)
 
 void * handleMsg (void * args)
 {
+	DataHeader * outgoingMsg;
+	ArgForThreads * temp = (ArgForThreads*) args; 
+	struct sockaddr_in tempAddr = temp->remaddr;
+	int returnValue; 
+	int r = 0; 
+	int i; 
+	AcceptedClients * tempClient;
+	DataHeader tempMsg;
 	
+	switch (temp->incommingMsg->flag)
+	{
+		//syn received
+		case 0: 
+			while(r == 0)
+			{
+				r = rand(); 
+			}
+			createDataHeader(1, r, temp->incommingMsg->seq, 3, temp->incommingMsg->crc, "This is a synAck" , outgoingMsg); 
+			sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
+			addClient(clients, temp->remaddr, r); 
+			break;
+		//ack on the synAck recived
+		case 1:
+			tempClient = findClient(clients->head, temp->remaddr, temp->incommingMsg->id );
+			if(tempClient != NULL)
+			{
+				tempClient->synAckAck = 1;
+				tempClient->nextInSeq = temp->incommingMsg->seq; 
+			}
+			
+			break;
+		//getMsg from client
+		case 2:
+			tempClient = findClient(clients->head, temp->remaddr, temp->incommingMsg->id );
+			if (tempClient != NULL)
+			{
+				if(temp->incommingMsg->seq == tempClient->nextInSeq)
+				{
+					addNodeToList(head, temp->incommingMsg); 
+					for(i = 0; i < (WINDOWSIZE-1); i++)
+					{
+						if (window[i].seq != 0)
+						{
+							
+							addNodeToList(head, &(window[i])); 
+						}
+					}
+					createDataHeader(2,  temp->incommingMsg->id, temp->incommingMsg->seq, 3, temp->incommingMsg->crc, "This is an Ack" , outgoingMsg); 
+					sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
+				}
+				else if(temp->incommingMsg->seq == (tempClient->nextInSeq+1))
+				{
+					addToArr(temp->incommingMsg, 0);
+					createDataHeader(2,  temp->incommingMsg->id, temp->incommingMsg->seq, 3, temp->incommingMsg->crc, "This is an Ack, I'm missing one msg" , outgoingMsg); 
+					sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
+				}
+				else if (temp->incommingMsg->seq == (tempClient->nextInSeq+2))
+				{
+					addToArr(temp->incommingMsg, 1);
+					createDataHeader(2,  temp->incommingMsg->id, temp->incommingMsg->seq, 3, temp->incommingMsg->crc, "This is an Ack, not accept any more" , outgoingMsg); 
+					sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
+				}
+				else if (temp->incommingMsg->seq == (tempClient->nextInSeq-1))
+				{
+					createDataHeader(2,  temp->incommingMsg->id, temp->incommingMsg->seq, 3, temp->incommingMsg->crc, "This is an Ack, i alredy have this one" , outgoingMsg); 
+					sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
+				}
+				else
+				{
+					//msg that i do not want
+				}
+			}
+			else
+			{
+				//a client that have not established connection is trying to send a msg
+			}
+			break;
+		//received fin
+		case 3://Jag e osäker på dessa hur vi ska ha dem fungera. just nu skickar jag en fin från server efter en sec
+			createDataHeader(3,  temp->incommingMsg->id, temp->incommingMsg->seq, 3, temp->incommingMsg->crc, "This is an FinAck " , outgoingMsg); 
+			sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
+			
+			sleep(1); 
+			createDataHeader(4,  temp->incommingMsg->id, temp->incommingMsg->seq, 3, temp->incommingMsg->crc, "This is an Fin " , outgoingMsg); 
+		break;
+		//received fin ack
+			removeClient(clients,tempAddr,temp->incommingMsg->id);
+		case 4:
+			
+			break;
+	}
+	msgThreadCounter = msgThreadCounter - 1;
 }
 
 
@@ -182,7 +298,7 @@ void checkMsgAndSendAck (ListHead * head, DataHeader * incommingMsg, DataHeader 
 	}
 	
 	//send ack
-	returnValue = sendto(fd, outgoingMsg, sizeof(*outgoingMsg), 0, (struct sockaddr *)&remaddr, &addrlen); 	
+	returnValue = sendto(fd, outgoingMsg, sizeof(*outgoingMsg), 0, (struct sockaddr *)&remaddr, addrlen); 	
 	
 	//error check
 	if (!returnValue )
@@ -197,7 +313,7 @@ void checkMsgAndSendAck (ListHead * head, DataHeader * incommingMsg, DataHeader 
 void fillArrWithSeq0()
 {
 	int i = 0; 
-	for (i = 0; i<WINDOWSIZE;i++)
+	for (i = 0; i<(WINDOWSIZE-1);i++)
 	{
 		window[i].seq = 0;
 	}
@@ -207,7 +323,7 @@ void fillArrWithSeq0()
 int emptyArrIndex()
 {
 	int i = 0;
-	for(i = 0; i < WINDOWSIZE; i++)
+	for(i = 0; i < (WINDOWSIZE-1); i++)
 	{
 		if(window[i].seq == 0)
 		{
@@ -218,12 +334,10 @@ int emptyArrIndex()
 }
 
 //
-void addToArr(DataHeader * incommingMsg, int * winCounter)
+void addToArr(DataHeader * incommingMsg, int index)
 {
-	int index = emptyArrIndex();
 	window[index] = *incommingMsg; 
 	strcpy(window[index].data, incommingMsg->data);
-	*winCounter = (*winCounter) + 1;
 }
 
 
@@ -264,6 +378,10 @@ void addNodeToList(ListHead * head, DataHeader * msg)
 	
 }
 
+
+
+
+
 void removeAllNodesFromList(ListHead * head)
 {
 	while (head->head != NULL)
@@ -291,3 +409,4 @@ int searchList(ListNode * node, int seqNr)
 	}
 	return -35; 
 }
+
