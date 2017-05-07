@@ -26,6 +26,7 @@ int main(int argc, char *argv[])
     //For responding
     struct sockaddr_in sendToSock;     /* remote address */
     socklen_t addrlen = sizeof(sendToSock);            /* length of addresses */
+
     int bytesReceived;                    /* # bytes received */
     unsigned char buffer[sizeof(DataHeader)];     /* receive buffer */
 

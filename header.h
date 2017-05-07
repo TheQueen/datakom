@@ -16,5 +16,5 @@ void createDataHeader(int flag, int id, int seq, int windowsize, int crc, char *
 
 //TimeOutFunc
 
-int startTimer (clock_t time);
-void * timerThread (void * arg);
+//int startTimer (clock_t time);
+//void * timerThread (void * arg);
