@@ -218,10 +218,10 @@ void * handleMsg (void * args)
 			sleep(1); 
 			createDataHeader(4,  temp->incommingMsg->id, temp->incommingMsg->seq, 3, temp->incommingMsg->crc, "This is an Fin " , outgoingMsg); 
 		break;
-		//received fin ack
-			removeClient(clients,tempAddr,temp->incommingMsg->id);
+		
 		case 4:
-			
+			//received fin ack
+			removeClient(clients,tempAddr,temp->incommingMsg->id);
 			break;
 	}
 	msgThreadCounter = msgThreadCounter - 1;
