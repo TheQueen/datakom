@@ -9,18 +9,16 @@
 
 void createDataHeader(int flag, int id, int seq, int windowSize, int crc, char * data , DataHeader * head)
 {
+	printf("In createDataHeader\n");
+	fflush(stdout);
 	head->flag = flag;
 	head->id = id;
 	head->seq = seq;
 	head->windowSize = windowSize;
 	head->crc = crc;
-	int i; 
-	for ( i = 0; data[i] != '\0'; i++)
-	{
-		head->data[i] = data[i];
-	}
-	head->data[i] = '\0';
-
+	strcpy(head->data, data);
+	printf("End of createDataHeader\n");
+	fflush(stdout);
 }
 
 //

@@ -12,7 +12,7 @@ typedef  struct header
 	char data[50];
 } DataHeader;
 
-void createDataHeader(int flag, int id, int seq, int windowsize, int crc, char * data , DataHeader * head);
+void createDataHeader(int flag, int id, int seq, int windowSize, int crc, char * data , DataHeader * head);
 
 //TimeOutFunc
 

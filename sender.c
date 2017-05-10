@@ -30,7 +30,6 @@ void * sendThread(void * fdSend);
 void * receiveThread(void * fdReceive);
 int errorCheck(DataHeader *buffer);
 
-
 int main(int argc, char *argv[])
 {
     pthread_t reader, writer;
@@ -39,8 +38,8 @@ int main(int argc, char *argv[])
     char hostName[HOST_NAME_LENGTH];
     socklen_t addrlen = sizeof(receiveOnSock);            /* length of addresses */
     int bytesReceived;                                    /* # bytes received */
-    DataHeader *syn = NULL;
-    DataHeader *buffer = NULL;                            //TODO: Remember if i need to malloc
+    DataHeader syn;
+    DataHeader *buffer = NULL;                            //TODO: Remember if i need to malloc ANSWER = YES!
     /* Check arguments */
     if(argv[1] == NULL)
     {
@@ -62,40 +61,43 @@ int main(int argc, char *argv[])
     printf("Socket created and initiated!\n");
 
     //////////////////////////////connection/////////////////////////////////
-
-    createDataHeader(0, 0, 0, 0, 0, "", syn);
-
-    while(1)
-    {
-      //Send syn to server
-      if (sendto(fdSend, syn, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
-      {
-        printf("sendto failed\n");
-        exit(EXIT_FAILURE);
-      }
-      printf("Sent SYN\n");
-      printf("waiting for SYNACK\n");
-      bytesReceived = recvfrom(fdReceive, buffer, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, &addrlen);
-      //TODO: remember to time and
-      if (bytesReceived > 0 && buffer->flag == 1 && errorCheck(buffer))
-      {
-        windowSize = buffer->windowSize;
-        connectionId = buffer->id;
-        break;
-      }
-      else
-      {
-        printf("No SYNACK: timer was triggerd or the message was not a SYNACK or there was some error in the crc-code.\n");
-      }
-    }
+    printf("Above first createDataHeader\n");
+    fflush(stdout);
+    createDataHeader(0, 0, 0, 0, 0, "hello", &syn);
+    printf("Below first createDataHeader\n");
+    fflush(stdout);
+    // while(1)
+    // {
+    //   //Send syn to server
+    //   if (sendto(fdSend, syn, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
+    //   {
+    //     printf("sendto failed\n");
+    //     exit(EXIT_FAILURE);
+    //   }
+    //   printf("Sent SYN\n");
+    //   printf("waiting for SYNACK\n");
+    //   bytesReceived = recvfrom(fdReceive, buffer, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, &addrlen);
+    //   //TODO: remember to time and
+    //   if (bytesReceived > 0 && buffer->flag == 1 && errorCheck(buffer))
+    //   {
+    //     windowSize = buffer->windowSize;
+    //     connectionId = buffer->id;
+    //     break;
+    //   }
+    //   else
+    //   {
+    //     printf("No SYNACK: timer was triggerd or the message was not a SYNACK or there was some error in the crc-code.\n");
+    //   }
+    // }
 
     //send synackack
-    if (sendto(fdSend, buffer, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
-    {
-      printf("sendto failed\n");
-      exit(EXIT_FAILURE);
-    }
+    // if (sendto(fdSend, buffer, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
+    // {
+    //   printf("sendto failed\n");
+    //   exit(EXIT_FAILURE);
+    // }
     printf("Sent ACK\n");
+    fflush(stdout);
     //TODO: listen for a time - if nothing is received everything is fine - we can star sending
     //                        - if synack is received our synackack never arrived
 
@@ -179,7 +181,8 @@ void initSockReceiveOn(struct sockaddr_in *myaddr, int fd, int port)
 void * sendThread(void *arg)
 {
   ///////////////////////////////create msgs///////////////////////////////////
-  DataHeader message[15];
+  int messages = 15;
+  DataHeader message[messages];
   createDataHeader(2, connectionId, 0, windowSize, 0, "0", &message[0]);
   createDataHeader(2, connectionId, 1, windowSize, 0, "1", &message[1]);
   createDataHeader(2, connectionId, 2, windowSize, 0, "2", &message[2]);
@@ -197,23 +200,24 @@ void * sendThread(void *arg)
   createDataHeader(2, connectionId, 14, windowSize, 0, "14", &message[14]);
   printf("In sendThread\n");
 
-  // int i;
-  // for(i = 0; i<8; i++)
-  // {
-  //   // if(freeWindowSlots > 0)
-  //   // {
-  //   //   /* send a message to the server */
-  //   //   if (sendto(fd, msgHeader, sizeof(*msgHeader), 0, (struct sockaddr *)&sock, sizeof(sock)) < 0)
-  //   //   {
-  //   //     perror("sendto failed");
-  //   //     return 0;
-  //   //   }
-  //   //   else
-  //   //   {
-  //   //     i++;
-  //   //   }
-  //   // }
-  // }
+   int i;
+   for(i = 0; i<messages; i++)
+   {
+     if(sendPermission == 0)
+     {
+       /* send a message to the server */
+       if (sendto(fdSend, &message[i], sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
+       {
+         perror("sendto failed");
+         exit(EXIT_FAILURE);
+       }
+       else
+       {
+         i++;
+       }
+     }
+  }
+  printf("All messages sent!\n");
   return NULL;
 }
 
