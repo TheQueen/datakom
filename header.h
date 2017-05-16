@@ -1,4 +1,9 @@
 #include <time.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 
 //treansport header
 
@@ -17,19 +22,19 @@ void createDataHeader(int flag, int id, int seq, int windowSize, int crc, char *
 //////////////////////////MsgListOperations////////////////////////////////////////////////////////////////////
 typedef struct msgList
 {
-	clock_t timerStart;
-	int sent;							//0 = not sent - 1 = sent
+	pthread_t thread;
+	int sent;							//0 = no ack   - 1 = acked
 	int acked;						//0 = no ack   - 1 = acked
 	DataHeader *data;
 	struct msgList *next;
 } MsgList;
 
-void createMessages(MsgList *head, int id, int windowSize);
+void createMessages(MsgList *head, int id, int seqStart, int windowSize);
 
+void setAck(MsgList * head, int seq, int windowSize);
 
-//returns the amount of nodes removed
-//int removeIfAcked(ControlStruct c, int windowSize);
-//
+MsgList *removeFirstUntilNotAcked(MsgList *head, int *sendPermission);
+
 
 ///////////////////////////////TimerOperations//////////////////////////////////////////////////////////////////////
 

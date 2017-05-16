@@ -1,13 +1,5 @@
 #include "header.h"
 
-#include <pthread.h>
-#include <time.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-
-
 void createDataHeader(int flag, int id, int seq, int windowSize, int crc, char * data , DataHeader * head)
 {
 	printf("In createDataHeader\n");
@@ -22,11 +14,30 @@ void createDataHeader(int flag, int id, int seq, int windowSize, int crc, char *
 	fflush(stdout);
 }
 //////////////////////////MsgListOperations////////////////////////////////////////////////////////////////////
-void createMessages(MsgList *head, int id, int windowSize)
+void setAck(MsgList * head, int seq, int windowSize)
+{
+	int i;
+
+	for(i = 0; i<windowSize; i++)
+	{
+		//TODO: mutex stuff
+		if(head->data->seq == seq && head->sent)
+		{
+			pthread_cancel(head->thread);
+			head->acked = 1;
+			break;
+		}
+		else if(head->next != NULL)
+		{
+			head = head->next;
+		}
+	}
+}
+
+void createMessages(MsgList *head, int id, int seqStart, int windowSize)
 {
 	int msgLength = 0;
 	int i;
-	//int random = 13; //TODO:Need to randomize num for sequece? -ask Stina
 	char str[10];
 	MsgList *node = head;
 
@@ -34,18 +45,40 @@ void createMessages(MsgList *head, int id, int windowSize)
 	scanf("%d", &msgLength);
 	printf("\n");
 
-	for (i=0; i<msgLength; i++)
+	for (i=seqStart; i<msgLength+seqStart; i++)
 	{
 		node =(MsgList*)malloc(sizeof(MsgList));
-		node->timerStart = 0; //TODO: learn timer stuff
 		node->sent = 0;
 		node->acked = 0;
 		node->data = (DataHeader*)malloc(sizeof(DataHeader));
 		snprintf(str, sizeof(str), "%d", i);//just helps to set the message to the number of the message
-		createDataHeader(2, id,  /*?random+*/i, windowSize, /*insert real crc-value*/0, str, node->data);
+		createDataHeader(2, id, i, windowSize, /*insert real crc-value*/0, str, node->data);
 		node->next = NULL;
 		node = node->next;
 	}
+}
+
+MsgList *removeFirstUntilNotAcked(MsgList *head, int *sendPermission)
+{
+	MsgList *node = head;
+
+	while(node != NULL)
+	{
+		if(node->acked)
+		{
+			head = head->next;
+			free(node->data);
+			node->data = NULL;
+			free(node);
+			node = head;
+			*sendPermission = *sendPermission - 1;
+		}
+		else
+		{
+			break;
+		}
+	}
+	return head;
 }
 
 ///////////////////////////////TimerOperations//////////////////////////////////////////////////////////////////////
