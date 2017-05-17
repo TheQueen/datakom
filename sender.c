@@ -24,15 +24,16 @@ int windowSize = 0;
 int connected = 0;
 int connectionNotClosed = 1;
 int seqStart = 0;                                     //TODO: set this if I want
+int connectionPhase = 0;
+MsgList node;
 
-clock_t start = 0;
-clock_t stop = 0;
-clock_t timer = 0;
+clock_t timer = 0;                                    //TODO: make it a long int
 
 int createSock();
 void initSockSendto(struct sockaddr_in *myaddr, int fd, int port, char *host);
 void initSockReceiveOn(struct sockaddr_in *myaddr, int fd, int port);
 void * connectionThread(void * fdSend);
+void * sendThread(void * arg);
 void * receiveThread(void * fdReceive);
 int errorCheck(DataHeader *buffer);
 
@@ -50,6 +51,7 @@ int main(int argc, char *argv[])
       strncpy(hostName, argv[1], HOST_NAME_LENGTH);
       hostName[HOST_NAME_LENGTH - 1] = '\0';
     }
+
     pthread_create(&reader, NULL, receiveThread, NULL);
     pthread_create(&writer, NULL, connectionThread, NULL);
     pthread_exit(NULL);
@@ -128,9 +130,9 @@ void * connectionThread(void *arg)
 {
   DataHeader syn;
   DataHeader synack;
-  //DataHeader fin;
-  //DataHeader finack;
-  //MsgList *currentNode = NULL;
+  DataHeader fin;
+  DataHeader finack;
+  MsgList *currentNode = NULL;
 
   fdSend = createSock();
   initSockSendto(&sendToSock, fdSend, PORT, hostName);
@@ -138,7 +140,7 @@ void * connectionThread(void *arg)
   ////////////////////////////////////SYN////////////////////////////////////////////////
   createDataHeader(0, 0, 0, 0, 0/*insert crc*/, "SYN", &syn);
 
-  while(connectionId == 0)
+  while(connectionPhase == 0)
   {
     //TODO: start clock
     //Send syn to server
@@ -151,68 +153,85 @@ void * connectionThread(void *arg)
     sleep(1);
   }
 
-  //TODO: calculate timer
-  //timer = stop - start
+  //TODO: calculate timer make it a long
+  //timer (long)= stop - start
 
-  ////////////////////////////////////SYNACK////////////////////////////////////////////
+  ////////////////////////////////////SYNACKACK////////////////////////////////////////////
   //create SYNACK
   createDataHeader(1, connectionId, 0, windowSize, 0/*insert crc*/, "SYNACK", &synack);
 
-  while(!connected)
+  while(connectionPhase == 1)
   {
-    //send synack
-    if (sendto(fdSend, &synack, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
+    //TODO: start clock
+    connectionPhase = 2;
+    //Send synackack to server
+    if (sendto(fdSend, &syn, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
     {
-      printf("synack failed\n");
+      printf("syn failed\n");
       exit(EXIT_FAILURE);
     }
-    connected = 1;
-    printf("Sent SYNACK\n");
-    fflush(stdout);
-    //TODO: sleep(timer);
+    printf("Sent SYN\n");
+    //TODO:sleep(timer);
   }
 
   printf("\nConnected to receiver!\n");
-
+  /////////////////////////////message sending/////////////////////////////////////////
+  currentNode = head;
   createMessages(head, connectionId, seqStart, windowSize);
+  //TODO: mutexxxxx
+  while(head != NULL)
+  {
+    if(sendPermission < windowSize && currentNode != NULL)
+    {
+      pthread_create(&currentNode->thread, NULL, sendThread, (void*)currentNode);
+      currentNode = currentNode->next;
+    }
+  }
 
-
-  /////////////////////////////message sending//////////////////////////////////
-  // while(head != NULL)
-  // {
-  //   // if(sendPermission < windowSize)
-  //   // {
-  //   //   //start sendThreads?
-  //   // }
-  // }
-  //closepthreads
-
-  //TODO: make sendThread with this
-  // send message
-  // while(1)
-  // {
-  //   send again
-  //   usleep(timer/ehhhh);
-  // }
-
-  //windowSize = 0;
+  printf("All messages sent!\n");
+  connectionPhase = 3;
 
   //////////////////////////closing connection//////////////////////////////////
-  // createDataHeader(3, connectionId, 0, windowSize, 0/*insert crc*/, "FIN", &fin);
-  // while
-  //
-  //
-  // createDataHeader(4, connectionId, 0, windowSize, 0/*insert crc*/, "FINACK", &finack);
-  //
-  // connectionId = 0;
-  // connected = 0;
-  // int connectionNotClosed = 0;
+  createDataHeader(3, connectionId, 0, windowSize, 0/*insert crc*/, "FIN", &fin);
+  node.sent = 0;
+  node.acked = 0;
+  node.data = &fin;
+  node.next = NULL;
+  pthread_create(&node.thread, NULL, sendThread, (void*)&node);
+  pthread_join(node.thread, NULL);
+  //TODO: start timer thread
+
+  while (connectionPhase == 4)
+  {
+    ;
+  }
+
+  while(connectionPhase == 5)
+  {
+    //TODO: start clock
+    connectionPhase = 6;
+    //Send synackack to server
+    if (sendto(fdSend, &finack, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
+    {
+      printf("finack failed\n");
+      exit(EXIT_FAILURE);
+    }
+    printf("finack sent\n");
+    //TODO:sleep(timer);
+  }
+
+  printf("Connection closed\n");
 
   return NULL;
 }
 
 void * sendThread(void * arg)
 {
+  int type = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+	if (type != 0)
+	{
+		printf("Error in type\n");
+	}
   while(1)
   {
     //TODO: mutex
@@ -225,7 +244,6 @@ void * sendThread(void * arg)
   }
   return NULL;
 }
-
 
 void * receiveThread(void * arg)
 {
@@ -240,11 +258,11 @@ void * receiveThread(void * arg)
   fdReceive = createSock();
   initSockReceiveOn(&receiveOnSock, fdReceive, 0);
 
-  while(connectionNotClosed)
+  while(connectionPhase < 6)
   {
     bytesReceived = recvfrom(fdReceive, &buffer, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, &addrlen);
     //Add check for address that we received from
-    if (bytesReceived > 0 && errorCheck(&buffer))
+    if (bytesReceived > 0 /*TODO: && errorCheck(&buffer)*/)
     {
       switch (buffer.flag)
       {
@@ -254,25 +272,24 @@ void * receiveThread(void * arg)
         case 1:
           //SYNACK
           //if not connected then connect
-          if(connectionId == 0)
+          if(connectionPhase == 0)
           {
             //TODO: stop timer
+            connectionPhase = 1;
             windowSize = buffer.windowSize;
             connectionId = buffer.id;
-            connected = 1;
             printf("Sender connected with id: %d and messages creates with window size: %d\n", connectionId, windowSize);
           }
           //receiver timer must have been triggered and our SYNACK must have been lost
-          else
+          else if(connectionPhase == 2)
           {
-            connected = 0;
+            connectionPhase = 1;
           }
           break;
         case 2:
           //MSGACK
-
           //check connectionId if 0 then dont do stuff if not 0 do stuff
-          if(connected != 0 && head != NULL)
+          if(connectionPhase == 2 && head != NULL)
           {
             setAck(head, buffer.seq, windowSize);
             head = removeFirstUntilNotAcked(head, &sendPermission);
@@ -280,21 +297,21 @@ void * receiveThread(void * arg)
           break;
         case 3:
           //FIN
-
-          //check connectionId if 0 then dont do stuff if not 0 do stuff
-          // if(connected != 0)
-          // {
-          //
-          // }
+          if(connectionPhase == 4)
+          {
+            connectionPhase = 5;
+          }
+          if (connectionPhase == 6)
+          {
+            connectionPhase = 5;
+          }
           break;
         case 4:
           //FINACK
-
-          //check connectionId if 0 then dont do stuff if not 0 do stuff
-          // if(connected != 0)
-          // {
-          //
-          // }
+          if(connectionPhase == 3)
+          {
+            pthread_cancel(node.thread);
+          }
           break;
         default:
           break;
@@ -302,11 +319,6 @@ void * receiveThread(void * arg)
     }
   }
   return NULL;
-}
-
-int errorCheck(DataHeader *buffer)
-{
-  return 1;
 }
 
 // int threadCreate (void * functionCall, int threadParam, void * args)

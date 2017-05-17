@@ -5,8 +5,7 @@
 #include <string.h>
 #include <errno.h>
 
-//treansport header
-
+//transport header
 typedef  struct header
 {
 	int flag;
