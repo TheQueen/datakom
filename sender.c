@@ -21,20 +21,22 @@ int fdSend;
 int sendPermission = 0;
 int connectionId = 0;
 int windowSize = 0;
-int connected = 0;
-int connectionNotClosed = 1;
 int seqStart = 0;                                     //TODO: set this if I want
 int connectionPhase = 0;
 MsgList node;
+pthread_mutex_t mutex;
 
-clock_t timer = 0;                                    //TODO: make it a long int
+clock_t timerStart = 0;
+clock_t timerStop = 0;
+clock_t roundTripTime = 0;
+clock_t timer = 0;
 
 int createSock();
 void initSockSendto(struct sockaddr_in *myaddr, int fd, int port, char *host);
 void initSockReceiveOn(struct sockaddr_in *myaddr, int fd, int port);
 void * connectionThread(void * fdSend);
 void * sendThread(void * arg);
-void * receiveThread(void * fdReceive);
+void * receiveThread(void * arg);
 int errorCheck(DataHeader *buffer);
 
 int main(int argc, char *argv[])
@@ -52,9 +54,19 @@ int main(int argc, char *argv[])
       hostName[HOST_NAME_LENGTH - 1] = '\0';
     }
 
+    pthread_mutex_init(&mutex, NULL);
+
     pthread_create(&reader, NULL, receiveThread, NULL);
     pthread_create(&writer, NULL, connectionThread, NULL);
     pthread_exit(NULL);
+
+    sendPermission = 0;
+    connectionId = 0;
+    windowSize = 0;
+    seqStart = 0;
+    connectionPhase = 0;
+    printf("Connection closed\n");
+
     return (EXIT_SUCCESS);
 }
 
@@ -138,11 +150,19 @@ void * connectionThread(void *arg)
   initSockSendto(&sendToSock, fdSend, PORT, hostName);
 
   ////////////////////////////////////SYN////////////////////////////////////////////////
-  createDataHeader(0, 0, 0, 0, 0/*insert crc*/, "SYN", &syn);
+  createDataHeader(0, 0, 0, 0, getCRC(sizeof("SYN"), "SYN"), "SYN", &syn);
 
   while(connectionPhase == 0)
   {
-    //TODO: start clock
+    while (1)
+    {
+      if (pthread_mutex_trylock(&mutex))
+      {
+        timerStart = clock();
+        pthread_mutex_unlock(&mutex);
+        break;
+      }
+    }
     //Send syn to server
     if (sendto(fdSend, &syn, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
     {
@@ -153,16 +173,12 @@ void * connectionThread(void *arg)
     sleep(1);
   }
 
-  //TODO: calculate timer make it a long
-  //timer (long)= stop - start
-
   ////////////////////////////////////SYNACKACK////////////////////////////////////////////
   //create SYNACK
-  createDataHeader(1, connectionId, 0, windowSize, 0/*insert crc*/, "SYNACK", &synack);
+  createDataHeader(1, connectionId, seqStart, windowSize, getCRC(sizeof("SYNACK"), "SYNACK"), "SYNACK", &synack);
 
   while(connectionPhase == 1)
   {
-    //TODO: start clock
     connectionPhase = 2;
     //Send synackack to server
     if (sendto(fdSend, &syn, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
@@ -171,44 +187,58 @@ void * connectionThread(void *arg)
       exit(EXIT_FAILURE);
     }
     printf("Sent SYN\n");
-    //TODO:sleep(timer);
+    //wait timer
+    clock_t timer = clock() + roundTripTime;
+    while (clock() < timer);
   }
 
   printf("\nConnected to receiver!\n");
   /////////////////////////////message sending/////////////////////////////////////////
   currentNode = head;
-  createMessages(head, connectionId, seqStart, windowSize);
-  //TODO: mutexxxxx
-  while(head != NULL)
+  while (1)
   {
-    if(sendPermission < windowSize && currentNode != NULL)
+    if (pthread_mutex_trylock(&mutex))
     {
-      pthread_create(&currentNode->thread, NULL, sendThread, (void*)currentNode);
-      currentNode = currentNode->next;
+      createMessages(head, connectionId, seqStart, windowSize);
+      pthread_mutex_unlock(&mutex);
+      break;
     }
   }
-
+  while(head != NULL)
+  {
+    while (1)
+    {
+      if (pthread_mutex_trylock(&mutex))
+      {
+        if(sendPermission < windowSize && currentNode != NULL)
+        {
+          pthread_create(&currentNode->thread, NULL, sendThread, (void*)currentNode);
+          currentNode = currentNode->next;
+        }
+        pthread_mutex_unlock(&mutex);
+        break;
+      }
+    }
+  }
   printf("All messages sent!\n");
   connectionPhase = 3;
 
   //////////////////////////closing connection//////////////////////////////////
-  createDataHeader(3, connectionId, 0, windowSize, 0/*insert crc*/, "FIN", &fin);
+  createDataHeader(3, connectionId, 0, windowSize, getCRC(sizeof("FIN"), "FIN"), "FIN", &fin);
   node.sent = 0;
   node.acked = 0;
   node.data = &fin;
   node.next = NULL;
   pthread_create(&node.thread, NULL, sendThread, (void*)&node);
   pthread_join(node.thread, NULL);
-  //TODO: start timer thread
 
   while (connectionPhase == 4)
   {
     ;
   }
-
+  createDataHeader(4, connectionId, 0, windowSize, getCRC(sizeof("FINACK"), "FINACK"), "FINACK", &fin);
   while(connectionPhase == 5)
   {
-    //TODO: start clock
     connectionPhase = 6;
     //Send synackack to server
     if (sendto(fdSend, &finack, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
@@ -217,10 +247,11 @@ void * connectionThread(void *arg)
       exit(EXIT_FAILURE);
     }
     printf("finack sent\n");
-    //TODO:sleep(timer);
+    //wait timer
+    clock_t timer = clock() + roundTripTime;
+    while (clock() < timer);
   }
-
-  printf("Connection closed\n");
+  close(fdSend);
 
   return NULL;
 }
@@ -234,13 +265,25 @@ void * sendThread(void * arg)
 	}
   while(1)
   {
-    //TODO: mutex
-    if (sendto(fdSend, ((MsgList*)arg)->data, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
+    while (1)
     {
-      printf("send failed\n");
-      exit(EXIT_FAILURE);
+      if (pthread_mutex_trylock(&mutex))
+      {
+        if((MsgList*)arg != NULL)
+        {
+          if (sendto(fdSend, ((MsgList*)arg)->data, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
+          {
+            printf("send failed\n");
+            exit(EXIT_FAILURE);
+          }
+        }
+        pthread_mutex_unlock(&mutex);
+        break;
+      }
     }
-    //TODO: sleep(timer);
+    //wait timer
+    clock_t timer = clock() + roundTripTime;
+    while (clock() < timer);
   }
   return NULL;
 }
@@ -262,7 +305,7 @@ void * receiveThread(void * arg)
   {
     bytesReceived = recvfrom(fdReceive, &buffer, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, &addrlen);
     //Add check for address that we received from
-    if (bytesReceived > 0 /*TODO: && errorCheck(&buffer)*/)
+    if (bytesReceived > 0 && (calcError(buffer.crc, sizeof(buffer.data), buffer.data)) == 0)
     {
       switch (buffer.flag)
       {
@@ -274,10 +317,19 @@ void * receiveThread(void * arg)
           //if not connected then connect
           if(connectionPhase == 0)
           {
-            //TODO: stop timer
-            connectionPhase = 1;
-            windowSize = buffer.windowSize;
-            connectionId = buffer.id;
+            while (1)
+            {
+              if (pthread_mutex_trylock(&mutex))
+              {
+                timerStop = clock();
+                roundTripTime = (timerStop - timerStart) * 2;
+                connectionPhase = 1;
+                windowSize = buffer.windowSize;
+                connectionId = buffer.id;
+                pthread_mutex_unlock(&mutex);
+                break;
+              }
+            }
             printf("Sender connected with id: %d and messages creates with window size: %d\n", connectionId, windowSize);
           }
           //receiver timer must have been triggered and our SYNACK must have been lost
@@ -291,8 +343,16 @@ void * receiveThread(void * arg)
           //check connectionId if 0 then dont do stuff if not 0 do stuff
           if(connectionPhase == 2 && head != NULL)
           {
-            setAck(head, buffer.seq, windowSize);
-            head = removeFirstUntilNotAcked(head, &sendPermission);
+            while (1)
+            {
+              if (pthread_mutex_trylock(&mutex))
+              {
+                setAck(head, buffer.seq, windowSize);
+                head = removeFirstUntilNotAcked(head, &sendPermission);
+                pthread_mutex_unlock(&mutex);
+                break;
+              }
+            }
           }
           break;
         case 3:
@@ -318,23 +378,6 @@ void * receiveThread(void * arg)
       }
     }
   }
+  close(fdReceive);
   return NULL;
 }
-
-// int threadCreate (void * functionCall, int threadParam, void * args)
-// {
-//     //A function that uses the pthreads library to create a new thread
-//     //It  takes the function in which we want to start executing the new thread, a kind of id and a argument to pass to the function
-//     //On success it returns 0
-//     int err =0;
-//     err = pthread_create(&threadParam, NULL, functionCall, args);
-//     if(err != 0)
-//     {
-//         printf ("cant create thread\n");
-//     }
-//     else
-//     {
-//         //printf ("Successfully created thread!!!\n");
-//     }
-//     return err;
-// }

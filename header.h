@@ -5,6 +5,8 @@
 #include <string.h>
 #include <errno.h>
 
+#define POLY 0x1021
+
 //transport header
 typedef  struct header
 {
@@ -12,7 +14,7 @@ typedef  struct header
 	int id;
 	int seq;
 	int windowSize;
-	int crc;
+	unsigned short crc;
 	char data[50];
 } DataHeader;
 
@@ -34,12 +36,7 @@ void setAck(MsgList * head, int seq, int windowSize);
 
 MsgList *removeFirstUntilNotAcked(MsgList *head, int *sendPermission);
 
+///////////////////////////////ErrorCheck//////////////////////////////////////////////////////////////////////
 
-///////////////////////////////TimerOperations//////////////////////////////////////////////////////////////////////
-
-
-
-//TimeOutFunc
-
-//int startTimer (clock_t time);
-//void * timerThread (void * arg);
+unsigned short getCRC (int msgSize, char * msg);
+unsigned short calcError (unsigned short crc, int msgSize, char * msg);

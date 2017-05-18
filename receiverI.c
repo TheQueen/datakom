@@ -21,36 +21,36 @@ void initSockReceiveOn(struct sockaddr_in *myaddr, int fd, int port);
 
 int main(int argc, char *argv[])
 {
-    int fd;
-    struct sockaddr_in receiveOnSock;
-    //For responding
-    struct sockaddr_in sendToSock;     /* remote address */
-    socklen_t addrlen = sizeof(sendToSock);            /* length of addresses */
+  int fd;
+  struct sockaddr_in receiveOnSock;
+  //For responding
+  struct sockaddr_in sendToSock;     /* remote address */
+  socklen_t addrlen = sizeof(sendToSock);            /* length of addresses */
 
-    int bytesReceived;                    /* # bytes received */
-    unsigned char buffer[sizeof(DataHeader)];     /* receive buffer */
+  int bytesReceived;                    /* # bytes received */
+  unsigned char buffer[sizeof(DataHeader)];     /* receive buffer */
 
-    fd = createSock();
-    initSockReceiveOn(&receiveOnSock, fd, PORT);
+  fd = createSock();
+  initSockReceiveOn(&receiveOnSock, fd, PORT);
 
-    printf("Socket created and initiated!\n");
+  printf("Socket created and initiated!\n");
 
-    while(1)
-    {
-        printf("waiting on port %d\n", PORT);
-        bytesReceived = recvfrom(fd, buffer, BUFSIZE, 0, (struct sockaddr *)&sendToSock, &addrlen);
-        printf("received %d bytes\n", bytesReceived);
-        if (bytesReceived > 0)
-        {
-                buffer[bytesReceived] = 0;
-                printf("received message: \"%s\"\n", buffer);
-        }
+  while(1)
+  {
+      printf("waiting on port %d\n", PORT);
+      bytesReceived = recvfrom(fd, buffer, BUFSIZE, 0, (struct sockaddr *)&sendToSock, &addrlen);
+      printf("received %d bytes\n", bytesReceived);
+      if (bytesReceived > 0)
+      {
+              buffer[bytesReceived] = 0;
+              printf("received message: \"%s\"\n", buffer);
+      }
     }
     return (EXIT_SUCCESS);
-}
+  }
 
-int createSock()
-{
+  int createSock()
+  {
     int fd = -1;
 
     if( (fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)

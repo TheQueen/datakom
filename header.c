@@ -52,7 +52,7 @@ void createMessages(MsgList *head, int id, int seqStart, int windowSize)
 		node->acked = 0;
 		node->data = (DataHeader*)malloc(sizeof(DataHeader));
 		snprintf(str, sizeof(str), "%d", i);//just helps to set the message to the number of the message
-		createDataHeader(2, id, i, windowSize, /*insert real crc-value*/0, str, node->data);
+		createDataHeader(2, id, i, windowSize, getCRC(sizeof(str), str), str, node->data);
 		node->next = NULL;
 		node = node->next;
 	}
@@ -81,47 +81,60 @@ MsgList *removeFirstUntilNotAcked(MsgList *head, int *sendPermission)
 	return head;
 }
 
-///////////////////////////////TimerOperations//////////////////////////////////////////////////////////////////////
+///////////////////////////////ErrorChecking//////////////////////////////////////////////////////////////////////
 
-//
-// //timerfuncs
-//
-// int startTimer (clock_t time)
-// {
-// 	pthread_t pid;
-// 	int returnValue = 0;
-//
-// 	returnValue = pthread_create(&pid, NULL, timerThread, (void *) time);
-//
-// 	if (returnValue)
-// 	{
-// 		printf("Error from listen for syn: %s\n", strerror(errno) );
-// 		return -1;
-// 	}
-// 	return 1;
-// }
-//
-// void* timerThread (void * arg)
-// {
-// 	clock_t * time = (clock_t *)arg;
-// 	clock_t currentTime = clock() + *time;
-//
-// 	while (clock() < currentTime);
-//
-// }
-//
-// //get roundtrip time
-// /*
-//
-// start time when send away syn
-// clock_t start = clock();
-//
-// when receive synAck
-// clock_t end = clock();
-//
-// clock_t roundTripTime = end - start;
-//
-//
-//
-// */
-//
+unsigned short getCRC (int msgSize, char * msg)
+{
+	int i, bitIndex, testBit, xorFlag = 0; 
+	unsigned short rest = 0xff, chOfMsg;
+
+
+	printf("All the rest\n");
+
+	for (i = 0; i < msgSize; i++)
+	{
+		chOfMsg = msg[i];
+		printf("ch = %d ", chOfMsg);
+		testBit = 0x80;
+
+		for(bitIndex = 0; bitIndex < 8; bitIndex++)
+		{
+			//Checks if first bit is 1 if it is then a xor should be done
+			if (rest & 0x80)
+			{
+				xorFlag = 1;
+			}
+			else
+			{
+				xorFlag = 0;
+			}
+
+			rest = rest << 1; //move and add a 0
+
+			if (chOfMsg & testBit) //if the bit is 1 add 1 to rest (replaces the 0 above with a 1)
+			{
+				rest = rest + 1;
+			}
+
+			if (xorFlag) // makes the divide if the checked bit is 1
+			{
+				rest = rest ^ POLY;
+			}
+
+			testBit = testBit >> 1; //move so that it checks the next bit
+			printf("%d ", rest);
+		}
+		printf("\n");
+	}
+	printf("\n final rest = %d\n\n", rest);
+	return rest;
+}
+
+unsigned short calcError (unsigned short crc, int msgSize, char * msg)
+{
+	unsigned short rest;
+	rest = getCRC(msgSize, msg);
+	rest = rest - crc;
+	printf("\n final rest in Error = %d\n\n", rest);
+	return rest;
+}
