@@ -11,45 +11,46 @@
 
 #define PORT 5555
 #define HOST_NAME_LENGTH 50
-#define BUFSIZE 2048
 
 
 
 //int threadCreate (void * functionCall, int threadParam, void * args);
 int createSock();
-void initSock(struct sockaddr_in *myaddr, int fd, int port);
+void initSockSendto(struct sockaddr_in *myaddr, int fd, int port, char *host);
+void initSockReceiveOn(struct sockaddr_in *myaddr, int fd, int port);
 
 int main(int argc, char *argv[])
 {
-    int fd;
-    struct sockaddr_in sock;
-    //For responding
-    struct sockaddr_in remaddr;     /* remote address */
-    socklen_t addrlen = sizeof(remaddr);            /* length of addresses */
-    int recvlen;                    /* # bytes received */
-    unsigned char buf[BUFSIZE];     /* receive buffer */
+  int fd;
+  struct sockaddr_in receiveOnSock;
+  //For responding
+  struct sockaddr_in sendToSock;     /* remote address */
+  socklen_t addrlen = sizeof(sendToSock);            /* length of addresses */
 
-    fd = createSock();
-    initSock(&sock, fd, PORT);
+  int bytesReceived;                    /* # bytes received */
+  unsigned char buffer[sizeof(DataHeader)];     /* receive buffer */
 
-    printf("Socket created and initiated!\n");
+  fd = createSock();
+  initSockReceiveOn(&receiveOnSock, fd, PORT);
 
-    while(1)
-    {
-        printf("waiting on port %d\n", PORT);
-        recvlen = recvfrom(fd, buf, BUFSIZE, 0, (struct sockaddr *)&remaddr, &addrlen);
-        printf("received %d bytes\n", recvlen);
-        if (recvlen > 0)
-        {
-                buf[recvlen] = 0;
-                printf("received message: \"%s\"\n", buf);
-        }
+  printf("Socket created and initiated!\n");
+
+  while(1)
+  {
+      printf("waiting on port %d\n", PORT);
+      bytesReceived = recvfrom(fd, buffer, BUFSIZE, 0, (struct sockaddr *)&sendToSock, &addrlen);
+      printf("received %d bytes\n", bytesReceived);
+      if (bytesReceived > 0)
+      {
+              buffer[bytesReceived] = 0;
+              printf("received message: \"%s\"\n", buffer);
+      }
     }
     return (EXIT_SUCCESS);
-}
+  }
 
-int createSock()
-{
+  int createSock()
+  {
     int fd = -1;
 
     if( (fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
@@ -60,7 +61,40 @@ int createSock()
     return fd;
 }
 
-void initSock(struct sockaddr_in *myaddr, int fd, int port)
+void initSockSendto(struct sockaddr_in *myaddr, int fd, int port, char *host)
+{
+    /* bind to an arbitrary return address */
+    /* because this is the client side, we don't care about the address */
+    /* since no application will initiate communication here - it will */
+    /* just send responses */
+    /* INADDR_ANY is the IP address and 0 is the socket */
+    /* htonl converts a long integer (e.g. address) to a network representation */
+    /* htons converts a short integer (e.g. port) to a network representation */
+
+    struct hostent *hp;     /* host information */
+    /* look up the address of the server given its name */
+    hp = gethostbyname(host);
+    if (!hp)
+    {
+    	perror("could not obtain address of\n");
+    	exit(EXIT_FAILURE);
+    }
+
+    memset((char *)myaddr, 0, sizeof(*myaddr));
+    myaddr->sin_family = AF_INET;
+    myaddr->sin_addr.s_addr = htonl(INADDR_ANY);
+    myaddr->sin_port = htons(port);
+    memcpy((void *)&myaddr->sin_addr, hp->h_addr_list[0], hp->h_length);
+
+    // if (bind(fd, (struct sockaddr *)myaddr, sizeof(*myaddr)) < 0)
+    // {
+    //     perror("bind failed");
+    //     exit(EXIT_FAILURE);
+    //
+    // }
+}
+
+void initSockReceiveOn(struct sockaddr_in *myaddr, int fd, int port)
 {
     /* bind to an arbitrary return address */
     /* because this is the client side, we don't care about the address */
@@ -82,6 +116,7 @@ void initSock(struct sockaddr_in *myaddr, int fd, int port)
         exit(EXIT_FAILURE);
     }
 }
+
 
 // int main ()
 // {

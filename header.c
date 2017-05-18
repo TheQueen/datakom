@@ -1,10 +1,4 @@
 #include "header.h"
-#include <pthread.h>
-#include <time.h>
-#include <stdio.h>
-#include <errno.h>
-
-#define POLY 0x1021
 
 void createDataHeader(int flag, int id, int seq, int windowSize, int crc, char * data , DataHeader * head)
 {
@@ -30,6 +24,7 @@ void addClient(AccClientListHead * head, struct sockaddr_in remaddr, int id )
 		head->head->finAck = 0;
 		pthread_mutex_init(&(head->head->mutex),NULL); 
 	}
+  
 	else
 	{
 		temp = head->head; 
@@ -259,34 +254,74 @@ int searchList(ListNode * node, int seqNr)
 	{
 		searchList(node->next, seqNr);
 	}
-	return -35; 
+	return -35;
 }
-
-
-//timerfuncs
-
-int startTimer (clock_t time)
+//////////////////////////MsgListOperations////////////////////////////////////////////////////////////////////
+void setAck(MsgList * head, int seq, int windowSize)
 {
-	pthread_t pid; 
-	int returnValue = 0; 
-	
-	returnValue = pthread_create(&pid, NULL, timerThread, (void *) time);
-	
-	if (returnValue)
+	int i;
+
+	for(i = 0; i<windowSize; i++)
 	{
-		printf("Error from listen for syn: %s\n", strerror(errno) ); 
-		return -1; 
+		//TODO: mutex stuff
+		if(head->data->seq == seq && head->sent)
+		{
+			pthread_cancel(head->thread);
+			head->acked = 1;
+			break;
+		}
+		else if(head->next != NULL)
+		{
+			head = head->next;
+		}
 	}
-	return 1; 
 }
 
-void* timerThread (void * arg)
+void createMessages(MsgList *head, int id, int seqStart, int windowSize)
 {
-	clock_t * time = (clock_t *)arg;
-	clock_t currentTime = clock() + *time; 
-	
-	while (clock() < currentTime);
-	return 0;
+	int msgLength = 0;
+	int i;
+	char str[10];
+	MsgList *node = head;
+
+	printf("Enter number of packages to send to receiver: ");
+	scanf("%d", &msgLength);
+	printf("\n");
+
+	for (i=seqStart; i<msgLength+seqStart; i++)
+	{
+		node =(MsgList*)malloc(sizeof(MsgList));
+		node->sent = 0;
+		node->acked = 0;
+		node->data = (DataHeader*)malloc(sizeof(DataHeader));
+		snprintf(str, sizeof(str), "%d", i);//just helps to set the message to the number of the message
+		createDataHeader(2, id, i, windowSize, getCRC(sizeof(str), str), str, node->data);
+		node->next = NULL;
+		node = node->next;
+	}
+}
+
+MsgList *removeFirstUntilNotAcked(MsgList *head, int *sendPermission)
+{
+	MsgList *node = head;
+
+	while(node != NULL)
+	{
+		if(node->acked)
+		{
+			head = head->next;
+			free(node->data);
+			node->data = NULL;
+			free(node);
+			node = head;
+			*sendPermission = *sendPermission - 1;
+		}
+		else
+		{
+			break;
+		}
+	}
+	return head;
 }
 
 void * finTimer(void * arg)
@@ -358,21 +393,54 @@ void * synTimer(void * arg)
 	return (void *) 1; 
 }
 
-//get roundtrip time
-/*
+///////////////////////////////ErrorChecking//////////////////////////////////////////////////////////////////////
 
-start time when send away syn
-clock_t start = clock(); 
-
-when receive synAck
-clock_t end = clock(); 
-
-clock_t roundTripTime = 2*(end - start); 
+unsigned short getCRC (int msgSize, char * msg)
+{
+	int i, bitIndex, testBit, xorFlag = 0; 
+	unsigned short rest = 0xff, chOfMsg;
 
 
+	printf("All the rest\n");
 
-*/
+	for (i = 0; i < msgSize; i++)
+	{
+		chOfMsg = msg[i];
+		printf("ch = %d ", chOfMsg);
+		testBit = 0x80;
 
+		for(bitIndex = 0; bitIndex < 8; bitIndex++)
+		{
+			//Checks if first bit is 1 if it is then a xor should be done
+			if (rest & 0x80)
+			{
+				xorFlag = 1;
+			}
+			else
+			{
+				xorFlag = 0;
+			}
+
+			rest = rest << 1; //move and add a 0
+
+      if (chOfMsg & testBit) //if the bit is 1 add 1 to rest (replaces the 0 above with a 1)
+			{
+				rest = rest + 1;
+			}
+
+			if (xorFlag) // makes the divide if the checked bit is 1
+			{
+				rest = rest ^ POLY;
+			}
+
+			testBit = testBit >> 1; //move so that it checks the next bit
+			printf("%d ", rest);
+		}
+		printf("\n");
+	}
+	printf("\n final rest = %d\n\n", rest);
+	return rest;
+}
 
 //convert char to bit
 void convertChar (int * bitArr, int arrSize, char * msg)
@@ -449,3 +517,4 @@ unsigned short calcError (unsigned short crc, int msgSize, char * msg)
 	printf("\n final rest in Error = %d\n\n", rest);
 	return rest;
 }	
+
