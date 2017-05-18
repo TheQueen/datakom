@@ -150,7 +150,7 @@ void * connectionThread(void *arg)
   initSockSendto(&sendToSock, fdSend, PORT, hostName);
 
   ////////////////////////////////////SYN////////////////////////////////////////////////
-  createDataHeader(0, 0, 0, 0, getCRC(sizeof("SYN"), "SYN"), "SYN", &syn);
+  createDataHeader(0, 0, 0, 0, getCRC(strlen("SYN"), "SYN"), "SYN", &syn);
 
   while(connectionPhase == 0)
   {
@@ -170,7 +170,7 @@ void * connectionThread(void *arg)
       exit(EXIT_FAILURE);
     }
     printf("Sent SYN\n");
-    sleep(1);
+    sleep(1000);
   }
 
   ////////////////////////////////////SYNACKACK////////////////////////////////////////////

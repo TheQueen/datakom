@@ -48,6 +48,8 @@ int main(int argc, char *argv[])
 	pthread_t listener; 
 	ArgForThreads args; 
 	
+	clients = NULL; 
+	
     srand(time(NULL));
 	//Create socket
 	
@@ -75,115 +77,235 @@ int main(int argc, char *argv[])
 
 void * listenFunc(void * args)
 {
+	ArgForThreads * bla = NULL;
 	
-	ArgForThreads * temp = (ArgForThreads*) args; 
-	struct sockaddr_in tempAddr = temp->remaddr;
+	struct sockaddr_in tempAddr;
+	
 	pthread_t msg; 
 	int msgRecv;
 	while (1) 
 	{
-		printf("-----Listening for msgs----- \n");
-		msgRecv = recvfrom(temp->fd, temp->incommingMsg, sizeof(DataHeader), 0, (struct sockaddr *) &tempAddr, (socklen_t*)&(temp->addrlen));
+		printf("hello\n");
+		fflush(stdout);
+		bla = (ArgForThreads *) malloc(sizeof(ArgForThreads));
+		if( bla == NULL)
+		{
+			printf("FFFFFFFFFFF\n");
+			fflush(stdout);
+		}
+		printf("1");
+		fflush(stdout);
+		bla  = (ArgForThreads*) args; 
+		printf("4\n");
+		fflush(stdout);
+		tempAddr = bla->remaddr;
+		
+		printf("-----Listening for msgs----- \n\n\n");
+		fflush(stdout);
+		msgRecv = recvfrom(bla->fd, &(bla->incommingMsg), sizeof(DataHeader), 0, (struct sockaddr *) &tempAddr, (socklen_t*)&(bla->addrlen));
 
 		//error check
 		if (!msgRecv)
 		{
-			printf("Error from listenFunc for msg: %s\n", strerror(errno) ); 
-
+			printf("Error from listenFunc for msg: %s\n", strerror(errno) );
+			fflush(stdout);
 		}
 
 		else 
-		{ 
-			if((calcError(temp->incommingMsg->crc, strlen(temp->incommingMsg->data), temp->incommingMsg->data)) == 0)
+		{
+			printf("prut\n");
+			fflush(stdout);
+			bla->sock = tempAddr; 
+			printf("msg from client: %s\n", bla->incommingMsg.data);
+			fflush(stdout);
+			if((calcError(bla->incommingMsg.crc, strlen(bla->incommingMsg.data), bla->incommingMsg.data)) == 0)
 			{
-				pthread_create(&msg, NULL, handleMsg, args); 
+				printf("flag = %d\n", bla->incommingMsg.flag);
+				fflush(stdout);
+				pthread_create(&msg, NULL, handleMsg, bla); 
 			}
 		}
 		
+		
 	}
+	free(bla);
+	bla = NULL;
 	return (void *) 1; 
 }
 
 
 void * handleMsg (void * args)
 {
+	printf("handleMSG\n");
+	fflush(stdout);
+	DataHeader * outgoingMsg = (DataHeader *) malloc(sizeof(DataHeader));
+	FinArg * synArgs = (FinArg*) malloc(sizeof(FinArg));
+	FinArg * finArgs = (FinArg*) malloc(sizeof(FinArg));
+	ArgForThreads * temp = (ArgForThreads*)malloc(sizeof(ArgForThreads));
+	temp = (ArgForThreads*) args; 
+	printf("flag = %d\n", temp->incommingMsg.flag);
+	fflush(stdout);
+	DataHeader * incommingMsg = (DataHeader *) malloc (sizeof(DataHeader));
+	incommingMsg->flag =  temp->incommingMsg.flag;
+	incommingMsg->id =  temp->incommingMsg.id;
+	incommingMsg->windowSize =  temp->incommingMsg.windowSize;
+	incommingMsg->crc =  temp->incommingMsg.crc;
+	strcpy(incommingMsg->data,temp->incommingMsg.data);
 	
-	DataHeader * outgoingMsg = NULL;
-	FinArg * synArgs = NULL;
-	FinArg * finArgs = NULL;
-	
-	ArgForThreads * temp = (ArgForThreads*) args; 
 	struct sockaddr_in tempAddr = temp->remaddr;
-	int r = 0; 
+	unsigned int r = 0; 
 	int i; 
 	char * msg; 
 	AcceptedClients * tempClient;
-	
-	switch (temp->incommingMsg->flag)
+	printf("innan switch\n");
+	fflush(stdout);
+	printf("flag = %d\n", temp->incommingMsg.flag);
+	fflush(stdout);
+	printf("flag in local = %d\n", incommingMsg->flag);
+	fflush(stdout);
+	switch (0)//incommingMsg->flag)
 	{
 		//syn received
 		case 0: 
+			printf("case 0\n");
+			fflush(stdout);
 			msg = "This is an SynAck"; 
 			while(r == 0)
 			{
+				printf("rand\n");
+				fflush(stdout);
 				r = rand(); 
 			}
-			pthread_mutex_lock(&mutex);
-			tempClient = findClient(clients->head, temp->remaddr, temp->incommingMsg->id );
-			pthread_mutex_unlock(&mutex);
+			
+			while(1)
+			{
+				printf("while\n");
+				fflush(stdout);
+				if(pthread_mutex_trylock(&mutex))
+				{
+					printf("find client\n");
+					fflush(stdout);
+					if(clients == NULL)
+					{
+						tempClient = NULL;
+					}
+					else
+					{
+						tempClient = findClient(clients->head, temp->remaddr, incommingMsg->id );
+					}
+					printf("client found\n");
+					fflush(stdout);
+					pthread_mutex_unlock(&mutex);
+					break;
+				}
+			}
 			
 			if (tempClient != NULL )
 			{
-				createDataHeader(1, tempClient->id, temp->incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
+				printf("tempClient != NULL\n");
+				fflush(stdout);
+				createDataHeader(1, tempClient->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
 				sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
 			}
 			else
 			{
-				createDataHeader(1, r, temp->incommingMsg->seq, WINDOWSIZE, temp->incommingMsg->crc, msg , outgoingMsg); 
+				printf("client == NULL\n");
+				fflush(stdout);
+				createDataHeader(1, r, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
+				printf("dataheder\n");
+				fflush(stdout);
 				sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
+				printf("sent\n");
+				fflush(stdout);
 				
-				pthread_mutex_lock(&mutex);
-				addClient(clients, temp->remaddr, r);
-				pthread_mutex_unlock(&mutex);
+				while(1)
+				{
+					if(pthread_mutex_trylock(&mutex))
+					{
+						printf("add client\n");
+						fflush(stdout);
+						addClient(clients, temp->remaddr, r);
+						printf("client added\n");
+						fflush(stdout);
+						pthread_mutex_unlock(&mutex);
+						break;
+					}
+				}
 			}
 			
-			pthread_mutex_lock(&mutex);
-			tempClient = findClient(clients->head, temp->remaddr, temp->incommingMsg->id );
-			pthread_mutex_unlock(&mutex);
+			while(1)
+			{
+				if(pthread_mutex_trylock(&mutex))
+				{
+					printf("find client\n");
+					fflush(stdout);
+					if(tempClient == NULL)
+					{
+						tempClient = findClient(NULL, temp->remaddr, incommingMsg->id );
+					}
+					else
+					{
+						tempClient = findClient(clients->head, temp->remaddr, incommingMsg->id );
+					}
+					printf("clients found\n");
+					fflush(stdout);
+					pthread_mutex_unlock(&mutex);
+					break; 
+				}
+			}
 			
-			 
-			synArgs->args = temp; 
-			synArgs->client = tempClient; 
-			synArgs->win = (int )WINDOWSIZE; 
+			printf("synargs\n");
+			fflush(stdout);
+			synArgs->args = temp;
+			printf("temp\n");
+			fflush(stdout);
+			synArgs->client = tempClient;
+			printf("client\n");
+			fflush(stdout);
+			synArgs->win = (int )WINDOWSIZE;
+			printf("win\n");
+			fflush(stdout);
 			
-			int err = pthread_create(&(tempClient->syn), NULL, synTimer, synArgs); 
+			int err = pthread_create(tempClient->syn, NULL, synTimer, synArgs); 
 			if(err != 0)
 			{
 				 printf ("cant create thread\n");
 			 }
 			 else
 			 {
-				 //printf ("Successfully created thread!!!\n");
+				 printf ("Successfully created thread!!!\n");
 			 }
 
 			pthread_exit(NULL);
 			break;
 		//ack on the synAck recived
 		case 1:
-			pthread_mutex_lock(&mutex);
-			tempClient = findClient(clients->head, temp->remaddr, temp->incommingMsg->id );
-			pthread_mutex_unlock(&mutex);
+			while(1)
+			{
+				if(pthread_mutex_trylock(&mutex))
+				{
+					tempClient = findClient(clients->head, temp->remaddr, incommingMsg->id );
+					pthread_mutex_unlock(&mutex);
+					break;
+				}
+			}
 			
 			if(tempClient != NULL)
 			{
-				pthread_cancel(tempClient->syn); 
+				pthread_cancel(*(tempClient->syn)); 
 				
-				pthread_mutex_lock(&mutex);
-				tempClient->timerTime = 2 * (clock() - tempClient->timerTime);
-				tempClient->synAckAck = 1;
-				fillArrWithSeq0(tempClient);
-				tempClient->nextInSeq = temp->incommingMsg->seq + 1;
-				pthread_mutex_unlock(&mutex);
+				while(1)
+				{
+					if(pthread_mutex_trylock(&mutex))
+					{
+						tempClient->timerTime = 2 * (clock() - tempClient->timerTime);
+						tempClient->synAckAck = 1;
+						fillArrWithSeq0(tempClient);
+						tempClient->nextInSeq = incommingMsg->seq + 1;
+						pthread_mutex_unlock(&mutex);
+						break; 
+					}
+				}
 			}
 			
 			break;
@@ -191,68 +313,91 @@ void * handleMsg (void * args)
 		//getMsg from client
 		case 2:
 			
-			pthread_mutex_lock(&mutex);
-			tempClient = findClient(clients->head, temp->remaddr, temp->incommingMsg->id );
-			pthread_mutex_unlock(&mutex);
+			while(1)
+			{
+				if(pthread_mutex_trylock(&mutex))
+				{
+					tempClient = findClient(clients->head, temp->remaddr, incommingMsg->id );
+					pthread_mutex_unlock(&mutex);
+				}
+			}
 			
 			if (tempClient != NULL )
 			{
 				if(tempClient->synAckAck == 1)
 				{
 					//recv the correct msg
-					if(temp->incommingMsg->seq == tempClient->nextInSeq)
+					if(incommingMsg->seq == tempClient->nextInSeq)
 					{
 						msg = "This is an Ack";
-						createDataHeader(2,  temp->incommingMsg->id, temp->incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg, outgoingMsg); 
+						createDataHeader(2,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg, outgoingMsg); 
 						sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
 						
-						pthread_mutex_lock(&(tempClient->mutex));
-						addMsgToClient(tempClient, temp->incommingMsg); 
-						
-						
-						for(i = 0; i < (WINDOWSIZE-1); i++)
+						while(1)
 						{
-							if (tempClient->window[i].seq != 0)
+							if(pthread_mutex_trylock(&(tempClient->mutex)))
 							{
-								addMsgToClient(tempClient, &(tempClient->window[i]));  
-								tempClient->window[i].seq = 0; 
+								addMsgToClient(tempClient, incommingMsg); 
+
+
+								for(i = 0; i < (WINDOWSIZE-1); i++)
+								{
+									if (tempClient->window[i].seq != 0)
+									{
+										addMsgToClient(tempClient, &(tempClient->window[i]));  
+										tempClient->window[i].seq = 0; 
+									}
+								}
+								pthread_mutex_unlock(&(tempClient->mutex));
+								break; 
 							}
 						}
-						pthread_mutex_unlock(&(tempClient->mutex));
 						
 					}
 					
 					//recv not the next in seq but +1
-					else if(temp->incommingMsg->seq == (tempClient->nextInSeq+1))
+					else if(incommingMsg->seq == (tempClient->nextInSeq+1))
 					{
 						msg = "This is an Ack, I'm missing one msg";
 						
-						pthread_mutex_lock(&(tempClient->mutex));
-						addToArr(tempClient, temp->incommingMsg, 0);
-						pthread_mutex_unlock(&(tempClient->mutex));
+						while(1)
+						{
+							if(pthread_mutex_trylock(&(tempClient->mutex)))
+							{
+								addToArr(tempClient, incommingMsg, 0);
+								pthread_mutex_unlock(&(tempClient->mutex));
+								break; 
+							}
+						}
 						
-						createDataHeader(2,  temp->incommingMsg->id, temp->incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
+						createDataHeader(2,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
 						sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
 					}
 					
 					//recv not the next in seq but +2
-					else if (temp->incommingMsg->seq == (tempClient->nextInSeq+2))
+					else if (incommingMsg->seq == (tempClient->nextInSeq+2))
 					{
 						msg = "This is an Ack, not accept any more";
 						
-						pthread_mutex_lock(&(tempClient->mutex));
-						addToArr(tempClient, temp->incommingMsg, 1);
-						pthread_mutex_unlock(&(tempClient->mutex));
+						while(1)
+						{
+							if(pthread_mutex_trylock(&(tempClient->mutex)))
+							{
+								addToArr(tempClient, incommingMsg, 1);
+								pthread_mutex_unlock(&(tempClient->mutex));
+								break; 
+							}
+						}
 						
-						createDataHeader(2,  temp->incommingMsg->id, temp->incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
+						createDataHeader(2,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
 						sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
 					}
 					
 					//ack on msg got lost send again
-					else if (temp->incommingMsg->seq < tempClient->nextInSeq)
+					else if (incommingMsg->seq < tempClient->nextInSeq)
 					{
 						msg = "This is an Ack, i alredy have this one"; 
-						createDataHeader(2,  temp->incommingMsg->id, temp->incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
+						createDataHeader(2,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
 						sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
 					}
 					
@@ -265,7 +410,7 @@ void * handleMsg (void * args)
 				{
 					//resend synAck because have not gotten synAckAck, but client thinks that connection is complet
 					msg = "This is an synAck";
-					createDataHeader(1, r, temp->incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg, outgoingMsg); 
+					createDataHeader(1, r, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg, outgoingMsg); 
 					sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
 				}
 			}
@@ -278,20 +423,27 @@ void * handleMsg (void * args)
 		//received fin
 		case 3:
 			
-			pthread_mutex_lock(&mutex);
-			tempClient = findClient(clients->head, temp->remaddr, temp->incommingMsg->id );
-			pthread_mutex_unlock(&mutex);
+			while(1)
+			{
+				if(pthread_mutex_lock(&mutex))
+				{
+					tempClient = findClient(clients->head, temp->remaddr, incommingMsg->id );
+					pthread_mutex_unlock(&mutex);
+					break; 
+				}
+			}
 			
 			if (tempClient != NULL )
 			{
 				if(tempClient->synAckAck == 1)
 				{
 					msg = "This is an FinAck";
-					createDataHeader(3,  temp->incommingMsg->id, temp->incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
+					createDataHeader(3,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
 					sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
 
 					 
-					finArgs->args = temp; 
+					finArgs->args = temp;
+					finArgs->args->incommingMsg = *incommingMsg;
 					finArgs->client = tempClient; 
 					finArgs->win = (int )WINDOWSIZE; 
 					
@@ -314,15 +466,26 @@ void * handleMsg (void * args)
 		case 4:
 			//received fin ack
 			
-			pthread_mutex_lock(&mutex);
-			tempClient = findClient(clients->head, temp->remaddr, temp->incommingMsg->id );
-			pthread_mutex_unlock(&mutex);
+			while(1)
+			{
+				if(pthread_mutex_trylock(&mutex))
+				{
+					tempClient = findClient(clients->head, temp->remaddr, incommingMsg->id );
+					pthread_mutex_unlock(&mutex);
+					break; 
+				}
+			}
 			
 			pthread_cancel(tempClient->fin); 
 			printMsg(tempClient->msgs); 
-			removeClient(clients,tempAddr,temp->incommingMsg->id);
+			removeClient(clients,tempAddr,incommingMsg->id);
 			break;
 	}
+	free(temp); 
+	free(incommingMsg); 
+	free(outgoingMsg);
+	free(synArgs);
+	free(finArgs);
 	return (void *) 1; 
 }
 
@@ -389,3 +552,7 @@ void addToArr(AcceptedClients * client, DataHeader * incommingMsg, int index)
 
 
 
+void cpyArg(ArgForThreads * to, ArgForThreads * from)
+{
+	
+}

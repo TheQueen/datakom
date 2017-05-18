@@ -13,46 +13,67 @@ void createDataHeader(int flag, int id, int seq, int windowSize, int crc, char *
 //AcceptedClientlist
 void addClient(AccClientListHead * head, struct sockaddr_in remaddr, int id )
 {
+	printf("Mwoa\n");
+	fflush(stdout);
 	AcceptedClients * temp;
-	if(head->head == NULL)
+	
+	AcceptedClients * toAdd;
+	if(head == NULL)
 	{
+		head = (AccClientListHead*)malloc(sizeof(AccClientListHead));
+		head->head = (AcceptedClients*) malloc(sizeof(AcceptedClients));
 		head->head->remaddr = remaddr; 
 		head->head->id = id; 
 		head->head->timerTime = clock(); 
 		head->head->msgs = NULL; 
 		head->head->synAckAck = 0;
 		head->head->finAck = 0;
+		head->head->syn = (pthread_t *)malloc(sizeof(pthread_t));
 		pthread_mutex_init(&(head->head->mutex),NULL); 
 	}
   
 	else
 	{
-		temp = head->head; 
-		head->head->remaddr = remaddr; 
-		head->head->id = id; 
-		head->head->timerTime = clock(); 
-		head->head->msgs = NULL; 
-		head->head->next = temp;
-		head->head->synAckAck = 0;
-		head->head->finAck = 0;
-		pthread_mutex_init(&(head->head->mutex),NULL); 
+		toAdd = (AcceptedClients*) malloc(sizeof(AcceptedClients));
+		toAdd->remaddr = remaddr; 
+		toAdd->id = id; 
+		toAdd->timerTime = clock(); 
+		toAdd->msgs = NULL; 
+		toAdd->next = head->head; 
+		toAdd->synAckAck = 0;
+		toAdd->finAck = 0;
+		pthread_mutex_init(&(toAdd->mutex),NULL); 
+		head->head = toAdd; 
+		
 	}
+	printf("done\n");
+	fflush(stdout);
 }
 
 AcceptedClients * findClient(AcceptedClients * client, struct sockaddr_in remaddr, int id )
 {
+	printf("huh?\n");
+	fflush(stdout);
 	if(client == NULL)
 	{
+		printf("client null\n");
+		fflush(stdout);
 		return NULL; 
 	}
 	if(client->remaddr.sin_addr.s_addr == remaddr.sin_addr.s_addr && client->id == id)
 	{
+		printf("client found\n");
+		fflush(stdout);
 		return client; 
 	}
 	else
 	{
+		printf("you turn me right round bby right round\n");
+		fflush(stdout);
 		return findClient( client->next, remaddr, id ); 
 	}
+	printf("oh nooooooo\n");
+	fflush(stdout);
 	return NULL;
 }
 
@@ -352,7 +373,7 @@ void * finTimer(void * arg)
 		}
 		
 		msg = "This is an Fin "; 
-		createDataHeader(4,  temp->incommingMsg->id, temp->incommingMsg->seq, finArgs->win, getCRC(strlen(msg), msg), msg, outgoingMsg); 
+		createDataHeader(4,  temp->incommingMsg.id, temp->incommingMsg.seq, finArgs->win, getCRC(strlen(msg), msg), msg, outgoingMsg); 
 		sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
 	}
 	return (void *) 1; 
@@ -360,14 +381,21 @@ void * finTimer(void * arg)
 
 void * synTimer(void * arg)
 {
+	printf("plehe");
+	fflush(stdout); 
 	int type = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	if (type != 0)
 	{
 		printf("Error in type");
 	}
-	
+	printf("plehadse");
+	fflush(stdout);
 	FinArg * finArgs = arg;
-	DataHeader * outgoingMsg = NULL;
+	printf("plehetqfea");
+	fflush(stdout);
+	DataHeader * outgoingMsg = (DataHeader*)malloc(sizeof(DataHeader));
+	printf("plehsdadase");
+	fflush(stdout);
 	ArgForThreads * temp = finArgs->args;
 	AcceptedClients * tempClient = finArgs->client;
 	struct sockaddr_in tempAddr = temp->remaddr;
@@ -386,7 +414,7 @@ void * synTimer(void * arg)
 		else
 		{
 			char * msg = "This is an SynAck"; 
-			createDataHeader(1, temp->incommingMsg->id, temp->incommingMsg->seq, finArgs->win, temp->incommingMsg->crc, msg , outgoingMsg); 
+			createDataHeader(1, temp->incommingMsg.id, temp->incommingMsg.seq, finArgs->win, temp->incommingMsg.crc, msg , outgoingMsg); 
 			sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
 		}
 	}
@@ -422,15 +450,12 @@ unsigned short getCRC (int msgSize, char * msg)
 	int i, bitIndex, testBit, xorFlag = 0; 
 	unsigned short rest = 0xff, chOfMsg; 
 	
-	
-	printf("All the rest\n");
-	
 	for (i = 0; i < msgSize; i++)
 	{
 		chOfMsg = msg[i]; 
-		printf("ch = %d ", chOfMsg);
 		testBit = 0x80;
-			
+		
+		printf("ch = %d ", chOfMsg);
 		for(bitIndex = 0; bitIndex < 8; bitIndex++)
 		{
 			//Checks if first bit is 1 if it is then a xor should be done 
@@ -466,6 +491,8 @@ unsigned short getCRC (int msgSize, char * msg)
 
 unsigned short calcError (unsigned short crc, int msgSize, char * msg)
 {
+	printf("CRC from client %d\n", crc);
+	printf("msgSize: %d\n", msgSize);
 	unsigned short rest; 
 	rest = getCRC(msgSize, msg); 
 	rest = rest - crc; 

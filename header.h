@@ -32,7 +32,7 @@ typedef struct argumetForThreads
     struct sockaddr_in sock; /*udp socket*/
     struct sockaddr_in remaddr;     /* remote address */
     socklen_t addrlen; /* length of addresses */
-	DataHeader * incommingMsg; /*buffer for incomming data*/
+	DataHeader incommingMsg; /*buffer for incomming data*/
 	
 }ArgForThreads; 
 
@@ -61,7 +61,7 @@ struct AcceptedClients
 	int nextInSeq; /*next seqNr that is expekted*/
 	ClientMsgList * msgs; //msgs from the client
 	clock_t timerTime; //time to wait until finAck
-	pthread_t syn; // pthread for synTimer
+	pthread_t * syn; // pthread for synTimer
 	pthread_t fin; // pthread for finTimer
 	DataHeader window[2]; // BYT TILL LISTA? 
 	pthread_mutex_t mutex; //mutex 
