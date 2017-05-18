@@ -38,15 +38,15 @@ typedef struct argumetForThreads
 
 
 //msg list fro the accepted clients conteins the seqNr for msg and the msg
-typedef struct msgList msgList;
+typedef struct ClientMsgList ClientMsgList;
 
-struct msgList
+struct ClientMsgList
 {
 	int seq; 
 	char data[50]; 
-	msgList * next;
+	ClientMsgList * next;
 	int last; 
-	msgList * prev; 
+	ClientMsgList * prev; 
 }; 
 
 //struct with accepted clients
@@ -59,7 +59,7 @@ struct AcceptedClients
 	int synAckAck; //if 1 connection asteblished 
 	int finAck; 
 	int nextInSeq; /*next seqNr that is expekted*/
-	msgList * msgs; //msgs from the client
+	ClientMsgList * msgs; //msgs from the client
 	clock_t timerTime; //time to wait until finAck
 	pthread_t syn; // pthread for synTimer
 	pthread_t fin; // pthread for finTimer
@@ -113,10 +113,10 @@ void addClient(AccClientListHead * head, struct sockaddr_in remaddr, int id );
 AcceptedClients * findClient(AcceptedClients * client, struct sockaddr_in remaddr, int id );
 int removeClient(AccClientListHead * clientHead, struct sockaddr_in remaddr, int id);
 void addMsgToClient(AcceptedClients * client, DataHeader * msg);//saves a msg sent by the client in the saved acceptedclient struct/list
-msgList * findTheFirstMsg(msgList * msg); 
-void printMsg(msgList * firstMsg); 
-void removeMsg(msgList * msg);
-msgList * getMsgToPrint (msgList * msg, int seq);
+ClientMsgList * findTheFirstMsg(ClientMsgList * msg); 
+void printMsg(ClientMsgList * firstMsg); 
+void removeMsg(ClientMsgList * msg);
+ClientMsgList * getMsgToPrint (ClientMsgList * msg, int seq);
 
 
 //////////////////////////MsgListOperations////////////////////////////////////////////////////////////////////

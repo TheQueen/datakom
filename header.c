@@ -101,7 +101,7 @@ int removeClient(AccClientListHead * clientHead, struct sockaddr_in remaddr, int
 
 void addMsgToClient(AcceptedClients * client, DataHeader * msg)
 {
-	msgList * temp; 
+	ClientMsgList * temp; 
 	if (client->msgs == NULL)
 	{
 		client->msgs->seq = msg->seq;
@@ -122,7 +122,7 @@ void addMsgToClient(AcceptedClients * client, DataHeader * msg)
 	}
 }
 
-msgList * findTheFirstMsg(msgList * msg)
+ClientMsgList * findTheFirstMsg(ClientMsgList * msg)
 {
 	if(msg == NULL)
 	{
@@ -139,9 +139,9 @@ msgList * findTheFirstMsg(msgList * msg)
 	return NULL;
 }
 
-void printMsg(msgList * firstMsg)//firstMsg = client->msgs
+void printMsg(ClientMsgList * firstMsg)//firstMsg = client->msgs
 {
-	msgList * msg = findTheFirstMsg(firstMsg);
+	ClientMsgList * msg = findTheFirstMsg(firstMsg);
 	int seq = msg->seq; 
 	
 	printf("------- Message Recived -------\n");
@@ -158,7 +158,7 @@ void printMsg(msgList * firstMsg)//firstMsg = client->msgs
 
 }
 
-void removeMsg(msgList * msg)
+void removeMsg(ClientMsgList * msg)
 {
 	if(msg->next != NULL)
 	{
@@ -174,7 +174,7 @@ void removeMsg(msgList * msg)
 	msg->prev = NULL; 
 }
 
-msgList * getMsgToPrint (msgList * msg, int seq)
+ClientMsgList * getMsgToPrint (ClientMsgList * msg, int seq)
 {
 	if(msg->seq == (seq+1))
 	{
@@ -395,52 +395,7 @@ void * synTimer(void * arg)
 
 ///////////////////////////////ErrorChecking//////////////////////////////////////////////////////////////////////
 
-unsigned short getCRC (int msgSize, char * msg)
-{
-	int i, bitIndex, testBit, xorFlag = 0; 
-	unsigned short rest = 0xff, chOfMsg;
 
-
-	printf("All the rest\n");
-
-	for (i = 0; i < msgSize; i++)
-	{
-		chOfMsg = msg[i];
-		printf("ch = %d ", chOfMsg);
-		testBit = 0x80;
-
-		for(bitIndex = 0; bitIndex < 8; bitIndex++)
-		{
-			//Checks if first bit is 1 if it is then a xor should be done
-			if (rest & 0x80)
-			{
-				xorFlag = 1;
-			}
-			else
-			{
-				xorFlag = 0;
-			}
-
-			rest = rest << 1; //move and add a 0
-
-      if (chOfMsg & testBit) //if the bit is 1 add 1 to rest (replaces the 0 above with a 1)
-			{
-				rest = rest + 1;
-			}
-
-			if (xorFlag) // makes the divide if the checked bit is 1
-			{
-				rest = rest ^ POLY;
-			}
-
-			testBit = testBit >> 1; //move so that it checks the next bit
-			printf("%d ", rest);
-		}
-		printf("\n");
-	}
-	printf("\n final rest = %d\n\n", rest);
-	return rest;
-}
 
 //convert char to bit
 void convertChar (int * bitArr, int arrSize, char * msg)
