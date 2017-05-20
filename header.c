@@ -15,37 +15,31 @@ void addClient(AccClientListHead * head, struct sockaddr_in remaddr, int id )
 {
 	printf("Mwoa\n");
 	fflush(stdout);
-	AcceptedClients * temp;
+	//AcceptedClients * temp;
 	
 	AcceptedClients * toAdd;
+	toAdd = (AcceptedClients*) malloc(sizeof(AcceptedClients));
+	toAdd->remaddr = remaddr; 
+	toAdd->id = id; 
+	toAdd->timerTime = clock(); 
+	toAdd->msgs = NULL; 
+	toAdd->synAckAck = 0;
+	toAdd->finAck = 0;
+	pthread_mutex_init(&(toAdd->mutex),NULL); 
+	
 	if(head == NULL)
 	{
-		head = (AccClientListHead*)malloc(sizeof(AccClientListHead));
-		head->head = (AcceptedClients*) malloc(sizeof(AcceptedClients));
-		head->head->remaddr = remaddr; 
-		head->head->id = id; 
-		head->head->timerTime = clock(); 
-		head->head->msgs = NULL; 
-		head->head->synAckAck = 0;
-		head->head->finAck = 0;
-		head->head->syn = (pthread_t *)malloc(sizeof(pthread_t));
-		pthread_mutex_init(&(head->head->mutex),NULL); 
+		toAdd->next = NULL; 		
 	}
   
 	else
 	{
-		toAdd = (AcceptedClients*) malloc(sizeof(AcceptedClients));
-		toAdd->remaddr = remaddr; 
-		toAdd->id = id; 
-		toAdd->timerTime = clock(); 
-		toAdd->msgs = NULL; 
-		toAdd->next = head->head; 
-		toAdd->synAckAck = 0;
-		toAdd->finAck = 0;
-		pthread_mutex_init(&(toAdd->mutex),NULL); 
-		head->head = toAdd; 
-		
+		toAdd->next = head->head; 		
 	}
+	head->head = toAdd; 
+	//head->head->syn = (pthread_t *)malloc(sizeof(pthread_t));
+	
+	
 	printf("done\n");
 	fflush(stdout);
 }
@@ -400,12 +394,12 @@ void * synTimer(void * arg)
 	AcceptedClients * tempClient = finArgs->client;
 	struct sockaddr_in tempAddr = temp->remaddr;
 	
-	clock_t time = (clock_t )tempClient->timerTime;
-	clock_t currentTime = clock() + time; 
+//	clock_t time = (clock_t )tempClient->timerTime;
+	//clock_t currentTime = clock() + time; 
 	
 	while (1)
 	{
-		while(clock() < currentTime);
+		sleep(2);	
 		
 		if(tempClient->synAckAck == 1)
 		{

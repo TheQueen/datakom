@@ -37,7 +37,7 @@ void addToArr(AcceptedClients * client, DataHeader * incommingMsg, int index);
 DataHeader window[(WINDOWSIZE-1)]; 
 ListHead * head;
 AccClientListHead * clients;
-pthread_mutex_t mutex; 
+pthread_mutex_t mutex;
 
 //void * startUpFunc ()
 int main(int argc, char *argv[])
@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
 	pthread_t listener; 
 	ArgForThreads args; 
 	
-	clients = NULL; 
+	clients = (AccClientListHead*)malloc(sizeof(AccClientListHead)); 
 	
     srand(time(NULL));
 	//Create socket
@@ -239,21 +239,19 @@ void * handleMsg (void * args)
 				{
 					printf("find client\n");
 					fflush(stdout);
-					if(tempClient == NULL)
-					{
-						tempClient = findClient(NULL, temp->remaddr, incommingMsg->id );
-					}
-					else
-					{
-						tempClient = findClient(clients->head, temp->remaddr, incommingMsg->id );
-					}
+					printf("blääääää\n");
+					fflush(stdout);
+					tempClient = findClient(clients->head, temp->remaddr, r );
 					printf("clients found\n");
 					fflush(stdout);
 					pthread_mutex_unlock(&mutex);
 					break; 
 				}
 			}
-			
+			printf("hello client: %d\n", tempClient->id );
+			fflush(stdout);
+			printf("win, synAckAck: %d\n", tempClient->synAckAck);
+			fflush(stdout);
 			printf("synargs\n");
 			fflush(stdout);
 			synArgs->args = temp;
@@ -263,20 +261,38 @@ void * handleMsg (void * args)
 			printf("client\n");
 			fflush(stdout);
 			synArgs->win = (int )WINDOWSIZE;
-			printf("win\n");
+			printf("win, synAckAck: %d\n", tempClient->synAckAck);
 			fflush(stdout);
 			
-			int err = pthread_create(tempClient->syn, NULL, synTimer, synArgs); 
-			if(err != 0)
+			while (tempClient->synAckAck != 1)
 			{
-				 printf ("cant create thread\n");
-			 }
-			 else
-			 {
-				 printf ("Successfully created thread!!!\n");
-			 }
+				printf("in synTimer\n");
+				fflush(stdout);
+				//while(clock() < currentTime && tempClient->synAckAck != 1);
+				sleep(2);
+				
+				printf("timer done\n");
+				fflush(stdout);
+				
+				if(tempClient->synAckAck == 1)
+				{
+					printf("synackack gotten\n");
+					fflush(stdout);
+					break; 
+				}
+				else
+				{
+					if(tempClient->synAckAck != 1)
+					{
+						printf("No synackack resend\n");
+						fflush(stdout);
+						msg = "This is an SynAck"; 
+						createDataHeader(1, temp->incommingMsg.id, temp->incommingMsg.seq, finArgs->win, temp->incommingMsg.crc, msg , outgoingMsg); 
+						sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
+					}
+				}
+			}
 
-			pthread_exit(NULL);
 			break;
 		//ack on the synAck recived
 		case 1:
@@ -292,7 +308,7 @@ void * handleMsg (void * args)
 			
 			if(tempClient != NULL)
 			{
-				pthread_cancel(*(tempClient->syn)); 
+				pthread_cancel(tempClient->syn); 
 				
 				while(1)
 				{
