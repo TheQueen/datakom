@@ -27,13 +27,14 @@ void * listenFunc(void * args);
 void * handleMsg (void * args);
 int createSock();
 void initSock(struct sockaddr_in *myaddr, int fd, int port); 
+void initSockSendto(struct sockaddr_in *myaddr, int fd, int port, char *host);
 void fillArrWithSeq0(AcceptedClients * client);
 void addToArr(AcceptedClients * client, DataHeader * incommingMsg, int index);
 
 
 
 //global variables 
-
+char hostName[HOST_NAME_LENGTH];
 DataHeader window[(WINDOWSIZE-1)]; 
 ListHead * head;
 AccClientListHead * clients;
@@ -47,6 +48,19 @@ int main(int argc, char *argv[])
 	head = createListHead();
 	pthread_t listener; 
 	ArgForThreads args; 
+	
+	if(argv[1] == NULL)
+    {
+      printf("Error: no host name\n");
+      exit(EXIT_FAILURE);
+    }
+    else
+    {
+      strncpy(hostName, argv[1], HOST_NAME_LENGTH);
+      hostName[HOST_NAME_LENGTH - 1] = '\0';
+    }
+
+	
 	
 	clients = (AccClientListHead*)malloc(sizeof(AccClientListHead)); 
 	
@@ -138,13 +152,15 @@ void * handleMsg (void * args)
 {
 	printf("handleMSG\n");
 	fflush(stdout);
+	int sent; 
 	DataHeader * outgoingMsg = (DataHeader *) malloc(sizeof(DataHeader));
 	FinArg * synArgs = (FinArg*) malloc(sizeof(FinArg));
 	FinArg * finArgs = (FinArg*) malloc(sizeof(FinArg));
 	ArgForThreads * temp = (ArgForThreads*)malloc(sizeof(ArgForThreads));
 	temp = (ArgForThreads*) args; 
-	printf("flag = %d\n", temp->incommingMsg.flag);
+	//printf("flag = %d\n", temp->incommingMsg.flag);
 	fflush(stdout);
+	
 	DataHeader * incommingMsg = (DataHeader *) malloc (sizeof(DataHeader));
 	incommingMsg->flag =  temp->incommingMsg.flag;
 	incommingMsg->id =  temp->incommingMsg.id;
@@ -153,17 +169,23 @@ void * handleMsg (void * args)
 	strcpy(incommingMsg->data,temp->incommingMsg.data);
 	
 	struct sockaddr_in tempAddr = temp->remaddr;
+	
+	
+	int sendFd = createSock();
+	initSockSendto(&tempAddr, sendFd, 0, hostName);
+	
+	
 	unsigned int r = 0; 
 	int i; 
 	char * msg; 
 	AcceptedClients * tempClient;
-	printf("innan switch\n");
+	/*printf("innan switch\n");
 	fflush(stdout);
 	printf("flag = %d\n", temp->incommingMsg.flag);
 	fflush(stdout);
 	printf("flag in local = %d\n", incommingMsg->flag);
-	fflush(stdout);
-	switch (0)//incommingMsg->flag)
+	fflush(stdout);*/
+	switch (incommingMsg->flag)
 	{
 		//syn received
 		case 0: 
@@ -172,19 +194,19 @@ void * handleMsg (void * args)
 			msg = "This is an SynAck"; 
 			while(r == 0)
 			{
-				printf("rand\n");
-				fflush(stdout);
+				//printf("rand\n");
+				//fflush(stdout);
 				r = rand(); 
 			}
 			
 			while(1)
 			{
-				printf("while\n");
-				fflush(stdout);
+				//printf("while\n");
+				//fflush(stdout);
 				if(pthread_mutex_trylock(&mutex))
 				{
-					printf("find client\n");
-					fflush(stdout);
+					//printf("find client\n");
+					//fflush(stdout);
 					if(clients == NULL)
 					{
 						tempClient = NULL;
@@ -193,8 +215,8 @@ void * handleMsg (void * args)
 					{
 						tempClient = findClient(clients->head, temp->remaddr, incommingMsg->id );
 					}
-					printf("client found\n");
-					fflush(stdout);
+	//				printf("client found\n");
+	//				fflush(stdout);
 					pthread_mutex_unlock(&mutex);
 					break;
 				}
@@ -202,31 +224,44 @@ void * handleMsg (void * args)
 			
 			if (tempClient != NULL )
 			{
-				printf("tempClient != NULL\n");
-				fflush(stdout);
+	//			printf("tempClient != NULL\n");
+	//			fflush(stdout);
 				createDataHeader(1, tempClient->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
-				sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
+				sent = sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
+				//error check
+				if (!sent)
+				{
+					printf("Error from case 0.1 for msg: %s\n", strerror(errno) );
+					fflush(stdout);
+				}
 			}
 			else
 			{
-				printf("client == NULL\n");
-				fflush(stdout);
+	//			printf("client == NULL\n");
+	//			fflush(stdout);
 				createDataHeader(1, r, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
-				printf("dataheder\n");
-				fflush(stdout);
-				sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
-				printf("sent\n");
-				fflush(stdout);
+	//			printf("dataheder\n");
+	//			fflush(stdout);
+				sent = sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
+				//error check
+				if (!sent)
+				{
+					printf("Error from 0.2 for msg: %s\n", strerror(errno) );
+					fflush(stdout);
+				}
+				
+	//			printf("sent\n");
+	//			fflush(stdout);
 				
 				while(1)
 				{
 					if(pthread_mutex_trylock(&mutex))
 					{
-						printf("add client\n");
-						fflush(stdout);
+	//					printf("add client\n");
+	//					fflush(stdout);
 						addClient(clients, temp->remaddr, r);
-						printf("client added\n");
-						fflush(stdout);
+	//					printf("client added\n");
+	//					fflush(stdout);
 						pthread_mutex_unlock(&mutex);
 						break;
 					}
@@ -237,42 +272,42 @@ void * handleMsg (void * args)
 			{
 				if(pthread_mutex_trylock(&mutex))
 				{
-					printf("find client\n");
-					fflush(stdout);
-					printf("blääääää\n");
-					fflush(stdout);
+	//				printf("find client\n");
+	//				fflush(stdout);
+	//				printf("blääääää\n");
+	//				fflush(stdout);
 					tempClient = findClient(clients->head, temp->remaddr, r );
-					printf("clients found\n");
-					fflush(stdout);
+	//				printf("clients found\n");
+	//				fflush(stdout);
 					pthread_mutex_unlock(&mutex);
 					break; 
 				}
 			}
-			printf("hello client: %d\n", tempClient->id );
-			fflush(stdout);
-			printf("win, synAckAck: %d\n", tempClient->synAckAck);
-			fflush(stdout);
-			printf("synargs\n");
-			fflush(stdout);
+	//		printf("hello client: %d\n", tempClient->id );
+	//		fflush(stdout);
+	//		printf("win, synAckAck: %d\n", tempClient->synAckAck);
+	//		fflush(stdout);
+	//		printf("synargs\n");
+	//		fflush(stdout);
 			synArgs->args = temp;
-			printf("temp\n");
-			fflush(stdout);
+	//		printf("temp\n");
+	//		fflush(stdout);
 			synArgs->client = tempClient;
-			printf("client\n");
-			fflush(stdout);
+	//		printf("client\n");
+	//		fflush(stdout);
 			synArgs->win = (int )WINDOWSIZE;
-			printf("win, synAckAck: %d\n", tempClient->synAckAck);
-			fflush(stdout);
+	//		printf("win, synAckAck: %d\n", tempClient->synAckAck);
+	//		fflush(stdout);
 			
 			while (tempClient->synAckAck != 1)
 			{
-				printf("in synTimer\n");
-				fflush(stdout);
+	//			printf("in synTimer\n");
+	//			fflush(stdout);
 				//while(clock() < currentTime && tempClient->synAckAck != 1);
-				sleep(2);
+				sleep(10);
 				
-				printf("timer done\n");
-				fflush(stdout);
+	//			printf("timer done\n");
+	//			fflush(stdout);
 				
 				if(tempClient->synAckAck == 1)
 				{
@@ -288,12 +323,19 @@ void * handleMsg (void * args)
 						fflush(stdout);
 						msg = "This is an SynAck"; 
 						createDataHeader(1, temp->incommingMsg.id, temp->incommingMsg.seq, finArgs->win, temp->incommingMsg.crc, msg , outgoingMsg); 
-						sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
+						sent = sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
+						//error check
+						if (!sent)
+						{
+							printf("Error from 0.3 for msg: %s\n", strerror(errno) );
+							fflush(stdout);
+						}
 					}
 				}
 			}
 
 			break;
+			
 		//ack on the synAck recived
 		case 1:
 			while(1)
@@ -347,8 +389,13 @@ void * handleMsg (void * args)
 					{
 						msg = "This is an Ack";
 						createDataHeader(2,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg, outgoingMsg); 
-						sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
-						
+						sent = sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
+						//error check
+						if (!sent)
+						{
+							printf("Error from case 2.1 for msg: %s\n", strerror(errno) );
+							fflush(stdout);
+						}	
 						while(1)
 						{
 							if(pthread_mutex_trylock(&(tempClient->mutex)))
@@ -387,7 +434,13 @@ void * handleMsg (void * args)
 						}
 						
 						createDataHeader(2,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
-						sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
+						sent = sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
+						//error check
+						if (!sent)
+						{
+							printf("Error from 2.2 for msg: %s\n", strerror(errno) );
+							fflush(stdout);
+						}
 					}
 					
 					//recv not the next in seq but +2
@@ -406,7 +459,13 @@ void * handleMsg (void * args)
 						}
 						
 						createDataHeader(2,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
-						sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
+						sent = sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
+						//error check
+						if (!sent)
+						{
+							printf("Error from 2.3 for msg: %s\n", strerror(errno) );
+							fflush(stdout);
+						}
 					}
 					
 					//ack on msg got lost send again
@@ -414,7 +473,13 @@ void * handleMsg (void * args)
 					{
 						msg = "This is an Ack, i alredy have this one"; 
 						createDataHeader(2,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
-						sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
+						sent = sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
+						//error check
+						if (!sent)
+						{
+							printf("Error from case 2.4 for msg: %s\n", strerror(errno) );
+							fflush(stdout);
+						}
 					}
 					
 					else
@@ -427,7 +492,13 @@ void * handleMsg (void * args)
 					//resend synAck because have not gotten synAckAck, but client thinks that connection is complet
 					msg = "This is an synAck";
 					createDataHeader(1, r, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg, outgoingMsg); 
-					sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
+					sent = sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen);
+					//error check
+					if (!sent)
+					{
+						printf("Error from case 2.5 for msg: %s\n", strerror(errno) );
+						fflush(stdout);
+					}
 				}
 			}
 			else
@@ -455,8 +526,13 @@ void * handleMsg (void * args)
 				{
 					msg = "This is an FinAck";
 					createDataHeader(3,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
-					sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
-
+					sent = sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
+					//error check
+					if (!sent)
+					{
+						printf("Error from 3 for msg: %s\n", strerror(errno) );
+						fflush(stdout);
+					}
 					 
 					finArgs->args = temp;
 					finArgs->args->incommingMsg = *incommingMsg;
@@ -502,6 +578,7 @@ void * handleMsg (void * args)
 	free(outgoingMsg);
 	free(synArgs);
 	free(finArgs);
+	free(&sendFd);
 	return (void *) 1; 
 }
 
@@ -543,6 +620,39 @@ void initSock(struct sockaddr_in *myaddr, int fd, int port)
     }
 }
 
+
+void initSockSendto(struct sockaddr_in *myaddr, int fd, int port, char *host)
+{
+    /* bind to an arbitrary return address */
+    /* because this is the client side, we don't care about the address */
+    /* since no application will initiate communication here - it will */
+    /* just send responses */
+    /* INADDR_ANY is the IP address and 0 is the socket */
+    /* htonl converts a long integer (e.g. address) to a network representation */
+    /* htons converts a short integer (e.g. port) to a network representation */
+
+    struct hostent *hp;     /* host information */
+    /* look up the address of the server given its name */
+    hp = gethostbyname(host);
+    if (!hp)
+    {
+    	printf("Error from listenFunc for msg: %s\n", strerror(errno) );
+			fflush(stdout);
+    }
+
+    memset((char *)myaddr, 0, sizeof(*myaddr));
+    myaddr->sin_family = AF_INET;
+    myaddr->sin_addr.s_addr = htonl(INADDR_ANY);
+    myaddr->sin_port = htons(port);
+    memcpy((void *)&myaddr->sin_addr, hp->h_addr_list[0], hp->h_length);
+
+    // if (bind(fd, (struct sockaddr *)myaddr, sizeof(*myaddr)) < 0)
+    // {
+    //     perror("bind failed");
+    //     exit(EXIT_FAILURE);
+    //
+    // }
+}
 //SocketFuncs
 
 //to fill arr with "Empty" dataHeaders

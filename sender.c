@@ -170,7 +170,7 @@ void * connectionThread(void *arg)
       exit(EXIT_FAILURE);
     }
     printf("Sent SYN\n");
-    sleep(1000);
+    sleep(10);
   }
 
   ////////////////////////////////////SYNACKACK////////////////////////////////////////////
@@ -186,7 +186,7 @@ void * connectionThread(void *arg)
       printf("syn failed\n");
       exit(EXIT_FAILURE);
     }
-    printf("Sent SYN\n");
+    printf("Sent SYNACK\n");
     //wait timer
     clock_t timer = clock() + roundTripTime;
     while (clock() < timer);

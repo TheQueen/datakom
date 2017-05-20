@@ -449,7 +449,7 @@ unsigned short getCRC (int msgSize, char * msg)
 		chOfMsg = msg[i]; 
 		testBit = 0x80;
 		
-		printf("ch = %d ", chOfMsg);
+		//printf("ch = %d ", chOfMsg);
 		for(bitIndex = 0; bitIndex < 8; bitIndex++)
 		{
 			//Checks if first bit is 1 if it is then a xor should be done 
@@ -475,22 +475,22 @@ unsigned short getCRC (int msgSize, char * msg)
 			}
 			
 			testBit = testBit >> 1; //move so that it checks the next bit
-			printf("%d ", rest); 
+			//printf("%d ", rest); 
 		}
-		printf("\n"); 
+		//printf("\n"); 
 	}
-	printf("\n final rest = %d\n\n", rest);
+	//printf("\n final rest = %d\n\n", rest);
 	return rest;
 }	
 
 unsigned short calcError (unsigned short crc, int msgSize, char * msg)
 {
-	printf("CRC from client %d\n", crc);
-	printf("msgSize: %d\n", msgSize);
+	//printf("CRC from client %d\n", crc);
+	//printf("msgSize: %d\n", msgSize);
 	unsigned short rest; 
 	rest = getCRC(msgSize, msg); 
 	rest = rest - crc; 
-	printf("\n final rest in Error = %d\n\n", rest);
+	//printf("\n final rest in Error = %d\n\n", rest);
 	return rest;
 }	
 
