@@ -93,7 +93,8 @@ void * listenFunc(void * args)
 {
 	ArgForThreads * bla = NULL;
 	
-	struct sockaddr_in tempAddr;
+	struct sockaddr_in senderAddr;
+	socklen_t addrlen = sizeof(senderAddr);
 	
 	pthread_t msg; 
 	int msgRecv;
@@ -112,11 +113,11 @@ void * listenFunc(void * args)
 		bla  = (ArgForThreads*) args; 
 		printf("4\n");
 		fflush(stdout);
-		tempAddr = bla->remaddr;
+		
 		
 		printf("-----Listening for msgs----- \n\n\n");
 		fflush(stdout);
-		msgRecv = recvfrom(bla->fd, &(bla->incommingMsg), sizeof(DataHeader), 0, (struct sockaddr *) &tempAddr, (socklen_t*)&(bla->addrlen));
+		msgRecv = recvfrom(bla->fd, &(bla->incommingMsg), sizeof(DataHeader), 0, (struct sockaddr *) &senderAddr, (socklen_t*)&(addrlen));
 
 		//error check
 		if (!msgRecv)
@@ -129,7 +130,8 @@ void * listenFunc(void * args)
 		{
 			printf("prut\n");
 			fflush(stdout);
-			bla->sock = tempAddr; 
+			bla->remaddr = senderAddr; 
+			bla->addrlen = addrlen; 
 			printf("msg from client: %s\n", bla->incommingMsg.data);
 			fflush(stdout);
 			if((calcError(bla->incommingMsg.crc, strlen(bla->incommingMsg.data), bla->incommingMsg.data)) == 0)
@@ -171,8 +173,9 @@ void * handleMsg (void * args)
 	struct sockaddr_in tempAddr = temp->remaddr;
 	
 	
+	
 	int sendFd = createSock();
-	initSockSendto(&tempAddr, sendFd, 0, hostName);
+	initSockSendto(&tempAddr, sendFd, 5732, hostName);
 	
 	
 	unsigned int r = 0; 

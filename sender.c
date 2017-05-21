@@ -297,14 +297,20 @@ void * receiveThread(void * arg)
   struct sockaddr_in receiveOnSock;                     //The address/socket we received on
   DataHeader buffer;
   printf("In receiveThread\n");
+	fflush(stdout);
 
   fdReceive = createSock();
-  initSockReceiveOn(&receiveOnSock, fdReceive, 0);
+  initSockReceiveOn(&receiveOnSock, fdReceive, 5732);
 
+	  printf("created recv socket\n");
+	fflush(stdout);
   while(connectionPhase < 6)
   {
+	    printf("before recvfrom\n");
+	fflush(stdout);
     bytesReceived = recvfrom(fdReceive, &buffer, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, &addrlen);
     //Add check for address that we received from
+	  printf("msg from recv: %s", buffer.data);
     if (bytesReceived > 0 && (calcError(buffer.crc, sizeof(buffer.data), buffer.data)) == 0)
     {
       switch (buffer.flag)
