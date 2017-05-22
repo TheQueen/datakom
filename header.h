@@ -129,7 +129,7 @@ typedef struct msgList
 	struct msgList *next;
 } MsgList;
 
-void createMessages(MsgList *head, int id, int seqStart, int windowSize);
+MsgList * createMessages(MsgList *head, int id, int seqStart, int windowSize);
 
 void setAck(MsgList * head, int seq, int windowSize);
 

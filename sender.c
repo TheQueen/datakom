@@ -194,24 +194,30 @@ void * connectionThread(void *arg)
 
   printf("\nConnected to receiver!\n");
   /////////////////////////////message sending/////////////////////////////////////////
-  currentNode = head;
+  
+	//head = (MsgList*)malloc(sizeof(MsgList));
   while (1)
   {
     if (pthread_mutex_trylock(&mutex))
     {
-      createMessages(head, connectionId, seqStart, windowSize);
+      head = createMessages(head, connectionId, seqStart+1, windowSize);
       pthread_mutex_unlock(&mutex);
       break;
     }
   }
+	currentNode = head;
   while(head != NULL)
   {
     while (1)
     {
+		//printf("while\n");
+		fflush(stdout); 
       if (pthread_mutex_trylock(&mutex))
       {
         if(sendPermission < windowSize && currentNode != NULL)
         {
+			printf("msg sent\n");
+			fflush(stdout); 
           pthread_create(&currentNode->thread, NULL, sendThread, (void*)currentNode);
           currentNode = currentNode->next;
         }
@@ -314,7 +320,8 @@ void * receiveThread(void * arg)
 	fflush(stdout);
     bytesReceived = recvfrom(fdReceive, &buffer, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, &addrlen);
     //Add check for address that we received from
-	  printf("msg from recv: %s\n", buffer.data);
+	  printf("flag: %d. msg from recv: %s\n", buffer.flag, buffer.data);
+	  printf("connectionPhase: %d\n", connectionPhase);
     if (bytesReceived > 0 && (calcError(buffer.crc, strlen(buffer.data), buffer.data)) == 0)
     {
       switch (buffer.flag)
@@ -351,12 +358,20 @@ void * receiveThread(void * arg)
         case 2:
           //MSGACK
           //check connectionId if 0 then dont do stuff if not 0 do stuff
+			  printf("msg ack goten \n");
+			  fflush(stdout);
           if(connectionPhase == 2 && head != NULL)
           {
+			  printf("yes \n");
+			  fflush(stdout);
             while (1)
             {
+				printf("blw \n");
+			  fflush(stdout);
               if (pthread_mutex_trylock(&mutex))
               {
+				  printf("set ack \n");
+			  fflush(stdout);
                 setAck(head, buffer.seq, windowSize);
                 head = removeFirstUntilNotAcked(head, &sendPermission);
                 pthread_mutex_unlock(&mutex);

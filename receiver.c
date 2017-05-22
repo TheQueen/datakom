@@ -126,6 +126,7 @@ void * listenFunc(void * args)
 			bla->remaddr = senderAddr; 
 			bla->addrlen = addrlen; 
 			printf("msg from client: %s\n", bla->incommingMsg.data);
+			printf("seq: %d", bla->incommingMsg.seq);
 			fflush(stdout);
 			if((calcError(bla->incommingMsg.crc, strlen(bla->incommingMsg.data), bla->incommingMsg.data)) == 0)
 			{
@@ -154,11 +155,15 @@ void * handleMsg (void * args)
 	temp = (ArgForThreads*) args; 
 		
 	DataHeader * incommingMsg = (DataHeader *) malloc (sizeof(DataHeader));
+	incommingMsg->seq = temp->incommingMsg.seq; 
 	incommingMsg->flag =  temp->incommingMsg.flag;
 	incommingMsg->id =  temp->incommingMsg.id;
 	incommingMsg->windowSize =  temp->incommingMsg.windowSize;
 	incommingMsg->crc =  temp->incommingMsg.crc;
 	strcpy(incommingMsg->data,temp->incommingMsg.data);
+	
+					printf("flag = %d\n", incommingMsg->flag);
+				fflush(stdout);
 	
 	struct sockaddr_in tempAddr = temp->remaddr;
 	
@@ -264,7 +269,7 @@ void * handleMsg (void * args)
 						printf("No synackack resend\n");
 						fflush(stdout);
 						msg = "This is an SynAck"; 
-						createDataHeader(1, temp->incommingMsg.id, temp->incommingMsg.seq, WINDOWSIZE, temp->incommingMsg.crc, msg , outgoingMsg); 
+						createDataHeader(1, temp->incommingMsg.id, temp->incommingMsg.seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
 						sent = sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
 						//error check
 						if (!sent)
@@ -319,6 +324,7 @@ void * handleMsg (void * args)
 				{
 					tempClient = findClient(clients->head, temp->remaddr, incommingMsg->id );
 					pthread_mutex_unlock(&mutex);
+					break;
 				}
 			}
 			
@@ -326,9 +332,15 @@ void * handleMsg (void * args)
 			{
 				if(tempClient->synAckAck == 1)
 				{
+					printf("in seq: %d", incommingMsg->seq);
+					printf("expecting seq: %d", tempClient->nextInSeq);
+					fflush(stdout);
+					
 					//recv the correct msg
 					if(incommingMsg->seq == tempClient->nextInSeq)
 					{
+						printf("msg i want\n");
+						fflush(stdout);
 						msg = "This is an Ack";
 						createDataHeader(2,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg, outgoingMsg); 
 						sent = sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
@@ -342,14 +354,17 @@ void * handleMsg (void * args)
 						{
 							if(pthread_mutex_trylock(&(tempClient->mutex)))
 							{
+								printf("msg add \n");
+								fflush(stdout);
 								addMsgToClient(tempClient, incommingMsg); 
-
+								tempClient->nextInSeq = incommingMsg->seq + 1; 
 
 								for(i = 0; i < (WINDOWSIZE-1); i++)
 								{
 									if (tempClient->window[i].seq != 0)
 									{
 										addMsgToClient(tempClient, &(tempClient->window[i]));  
+										tempClient->nextInSeq = tempClient->window[i].seq + 1;  
 										tempClient->window[i].seq = 0; 
 									}
 								}
@@ -364,7 +379,8 @@ void * handleMsg (void * args)
 					else if(incommingMsg->seq == (tempClient->nextInSeq+1))
 					{
 						msg = "This is an Ack, I'm missing one msg";
-						
+						printf("msg + 1\n");
+						fflush(stdout);
 						while(1)
 						{
 							if(pthread_mutex_trylock(&(tempClient->mutex)))
@@ -388,6 +404,8 @@ void * handleMsg (void * args)
 					//recv not the next in seq but +2
 					else if (incommingMsg->seq == (tempClient->nextInSeq+2))
 					{
+						printf("msg +2\n");
+						fflush(stdout);
 						msg = "This is an Ack, not accept any more";
 						
 						while(1)
@@ -413,6 +431,8 @@ void * handleMsg (void * args)
 					//ack on msg got lost send again
 					else if (incommingMsg->seq < tempClient->nextInSeq)
 					{
+						printf("msg i got\n");
+						fflush(stdout);
 						msg = "This is an Ack, i alredy have this one"; 
 						createDataHeader(2,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg); 
 						sent = sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen)); 
@@ -426,12 +446,14 @@ void * handleMsg (void * args)
 					
 					else
 					{
+						printf("msg i do not want\n");
+						fflush(stdout);
 						//msg that i do not want or can store
 					}
 				}
 				else 
 				{
-					//resend synAck because have not gotten synAckAck, but client thinks that connection is complet
+					/*//resend synAck because have not gotten synAckAck, but client thinks that connection is complet
 					msg = "This is an synAck";
 					createDataHeader(1, r, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg, outgoingMsg); 
 					sent = sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen);
@@ -440,7 +462,7 @@ void * handleMsg (void * args)
 					{
 						printf("Error from case 2.5 for msg: %s\n", strerror(errno) );
 						fflush(stdout);
-					}
+					}*/
 				}
 			}
 			else
