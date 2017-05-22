@@ -117,7 +117,7 @@ ClientMsgList * findTheFirstMsg(ClientMsgList * msg);
 void printMsg(ClientMsgList * firstMsg); 
 void removeMsg(ClientMsgList * msg);
 ClientMsgList * getMsgToPrint (ClientMsgList * msg, int seq);
-int checkIfIdExists(AcceptedClients * client, int randomId); 
+
 
 //////////////////////////MsgListOperations////////////////////////////////////////////////////////////////////
 typedef struct msgList

@@ -37,6 +37,7 @@ void initSockReceiveOn(struct sockaddr_in *myaddr, int fd, int port);
 void * connectionThread(void * fdSend);
 void * sendThread(void * arg);
 void * receiveThread(void * arg);
+int errorCheck(DataHeader *buffer);
 
 int main(int argc, char *argv[])
 {
@@ -180,7 +181,7 @@ void * connectionThread(void *arg)
   {
     connectionPhase = 2;
     //Send synackack to server
-    if (sendto(fdSend, &syn, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
+    if (sendto(fdSend, &synack, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
     {
       printf("syn failed\n");
       exit(EXIT_FAILURE);
@@ -231,11 +232,13 @@ void * connectionThread(void *arg)
   pthread_create(&node.thread, NULL, sendThread, (void*)&node);
   pthread_join(node.thread, NULL);
 
+  connectionPhase = 4;
   while (connectionPhase == 4)
   {
     ;
   }
-  createDataHeader(4, connectionId, 0, windowSize, getCRC(strlen("FINACK"), "FINACK"), "FINACK", &fin);
+	
+  createDataHeader(4, connectionId, 0, windowSize, getCRC(strlen("FINACK"), "FINACK"), "FINACK", &finack);
   while(connectionPhase == 5)
   {
     connectionPhase = 6;
@@ -248,7 +251,8 @@ void * connectionThread(void *arg)
     printf("finack sent\n");
     //wait timer
     clock_t timer = clock() + roundTripTime;
-    while (clock() < timer);
+    //while (clock() < timer);
+	  sleep(10);
   }
   close(fdSend);
 
@@ -282,7 +286,8 @@ void * sendThread(void * arg)
     }
     //wait timer
     clock_t timer = clock() + roundTripTime;
-    while (clock() < timer);
+    //while (clock() < timer);
+	sleep(10);
   }
   return NULL;
 }
@@ -299,18 +304,17 @@ void * receiveThread(void * arg)
 	fflush(stdout);
 
   fdReceive = createSock();
-  initSockReceiveOn(&receiveOnSock, fdReceive, 0);
+  initSockReceiveOn(&receiveOnSock, fdReceive, 5732);
 
-	printf("created recv socket\n");
+	  printf("created recv socket\n");
 	fflush(stdout);
   while(connectionPhase < 6)
   {
-	printf("before recvfrom\n");
+	    printf("before recvfrom\n");
 	fflush(stdout);
     bytesReceived = recvfrom(fdReceive, &buffer, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, &addrlen);
     //Add check for address that we received from
-	  printf("msg from recv: %s", buffer.data);
-	  
+	  printf("msg from recv: %s\n", buffer.data);
     if (bytesReceived > 0 && (calcError(buffer.crc, strlen(buffer.data), buffer.data)) == 0)
     {
       switch (buffer.flag)
@@ -321,16 +325,12 @@ void * receiveThread(void * arg)
         case 1:
           //SYNACK
           //if not connected then connect
-			   printf("case 0\n");
-			fflush(stdout);
           if(connectionPhase == 0)
           {
             while (1)
             {
               if (pthread_mutex_trylock(&mutex))
               {
-				   printf("mutex locked\n");
-				fflush(stdout);
                 timerStop = clock();
                 roundTripTime = (timerStop - timerStart) * 2;
                 connectionPhase = 1;

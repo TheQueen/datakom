@@ -13,7 +13,8 @@ void createDataHeader(int flag, int id, int seq, int windowSize, int crc, char *
 //AcceptedClientlist
 void addClient(AccClientListHead * head, struct sockaddr_in remaddr, int id )
 {
-	
+	printf("Mwoa\n");
+	fflush(stdout);
 	//AcceptedClients * temp;
 	
 	AcceptedClients * toAdd;
@@ -28,7 +29,6 @@ void addClient(AccClientListHead * head, struct sockaddr_in remaddr, int id )
 	
 	if(head == NULL)
 	{
-		
 		toAdd->next = NULL; 		
 	}
   
@@ -40,28 +40,34 @@ void addClient(AccClientListHead * head, struct sockaddr_in remaddr, int id )
 	//head->head->syn = (pthread_t *)malloc(sizeof(pthread_t));
 	
 	
-	
+	printf("done\n");
+	fflush(stdout);
 }
 
 AcceptedClients * findClient(AcceptedClients * client, struct sockaddr_in remaddr, int id )
 {
-	
+	printf("huh?\n");
+	fflush(stdout);
 	if(client == NULL)
 	{
-		
+		printf("client null\n");
+		fflush(stdout);
 		return NULL; 
 	}
 	if(client->remaddr.sin_addr.s_addr == remaddr.sin_addr.s_addr && client->id == id)
 	{
-		
+		printf("client found\n");
+		fflush(stdout);
 		return client; 
 	}
 	else
 	{
-		
+		printf("you turn me right round bby right round\n");
+		fflush(stdout);
 		return findClient( client->next, remaddr, id ); 
 	}
-	
+	printf("oh nooooooo\n");
+	fflush(stdout);
 	return NULL;
 }
 
@@ -150,6 +156,8 @@ ClientMsgList * findTheFirstMsg(ClientMsgList * msg)
 
 void printMsg(ClientMsgList * firstMsg)//firstMsg = client->msgs
 {
+	printf("in printMsg\n");
+	fflush(stdout); 
 	ClientMsgList * msg = findTheFirstMsg(firstMsg);
 	int seq = msg->seq; 
 	
@@ -196,22 +204,7 @@ ClientMsgList * getMsgToPrint (ClientMsgList * msg, int seq)
 	return NULL;
 }
 
-int checkIfIdExists(AcceptedClients * client, int randomId)
-{
-	if(client == NULL)
-	{
-		return 0; 
-	}
-	if (client->id == randomId)
-	{
-		return 1; 
-	}
-	else
-	{
-		return checkIfIdExists(client, randomId);
-	}
-	return 404; 
-}
+
 
 //ListFuncs
 
@@ -319,7 +312,7 @@ void createMessages(MsgList *head, int id, int seqStart, int windowSize)
 		node->acked = 0;
 		node->data = (DataHeader*)malloc(sizeof(DataHeader));
 		snprintf(str, sizeof(str), "%d", i);//just helps to set the message to the number of the message
-		createDataHeader(2, id, i, windowSize, getCRC(sizeof(str), str), str, node->data);
+		createDataHeader(2, id, i, windowSize, getCRC(strlen(str), str), str, node->data);
 		node->next = NULL;
 		node = node->next;
 	}
@@ -347,7 +340,7 @@ MsgList *removeFirstUntilNotAcked(MsgList *head, int *sendPermission)
 	}
 	return head;
 }
-/*
+
 void * finTimer(void * arg)
 {
 	int type = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
@@ -422,7 +415,7 @@ void * synTimer(void * arg)
 		}
 	}
 	return (void *) 1; 
-}*/
+}
 
 ///////////////////////////////ErrorChecking//////////////////////////////////////////////////////////////////////
 
