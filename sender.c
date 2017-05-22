@@ -32,7 +32,7 @@ clock_t roundTripTime = 0;
 clock_t timer = 0;
 
 int createSock();
-void initSockSendto(struct sockaddr_in *myaddr, int fd, int port, char *host);
+void initSockSendto(struct sockaddr_in *myaddr, int port, char *host);
 void initSockReceiveOn(struct sockaddr_in *myaddr, int fd, int port);
 void * connectionThread(void * fdSend);
 void * sendThread(void * arg);
@@ -82,7 +82,7 @@ int createSock()
     return fd;
 }
 
-void initSockSendto(struct sockaddr_in *myaddr, int fd, int port, char *host)
+void initSockSendto(struct sockaddr_in *myaddr, int port, char *host)
 {
     /* bind to an arbitrary return address */
     /* because this is the client side, we don't care about the address */
@@ -147,7 +147,7 @@ void * connectionThread(void *arg)
   MsgList *currentNode = NULL;
 
   fdSend = createSock();
-  initSockSendto(&sendToSock, fdSend, PORT, hostName);
+  initSockSendto(&sendToSock, PORT, hostName);
 
   ////////////////////////////////////SYN////////////////////////////////////////////////
   createDataHeader(0, 0, 0, 0, getCRC(strlen("SYN"), "SYN"), "SYN", &syn);
@@ -175,7 +175,7 @@ void * connectionThread(void *arg)
 
   ////////////////////////////////////SYNACKACK////////////////////////////////////////////
   //create SYNACK
-  createDataHeader(1, connectionId, seqStart, windowSize, getCRC(sizeof("SYNACK"), "SYNACK"), "SYNACK", &synack);
+  createDataHeader(1, connectionId, seqStart, windowSize, getCRC(strlen("SYNACK"), "SYNACK"), "SYNACK", &synack);
 
   while(connectionPhase == 1)
   {
@@ -224,7 +224,7 @@ void * connectionThread(void *arg)
   connectionPhase = 3;
 
   //////////////////////////closing connection//////////////////////////////////
-  createDataHeader(3, connectionId, 0, windowSize, getCRC(sizeof("FIN"), "FIN"), "FIN", &fin);
+  createDataHeader(3, connectionId, 0, windowSize, getCRC(strlen("FIN"), "FIN"), "FIN", &fin);
   node.sent = 0;
   node.acked = 0;
   node.data = &fin;
@@ -236,7 +236,7 @@ void * connectionThread(void *arg)
   {
     ;
   }
-  createDataHeader(4, connectionId, 0, windowSize, getCRC(sizeof("FINACK"), "FINACK"), "FINACK", &fin);
+  createDataHeader(4, connectionId, 0, windowSize, getCRC(strlen("FINACK"), "FINACK"), "FINACK", &fin);
   while(connectionPhase == 5)
   {
     connectionPhase = 6;
@@ -252,7 +252,6 @@ void * connectionThread(void *arg)
     while (clock() < timer);
   }
   close(fdSend);
-
   return NULL;
 }
 

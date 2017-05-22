@@ -4,67 +4,94 @@ void createDataHeader(int flag, int id, int seq, int windowSize, int crc, char *
 {
 	head->flag = flag;
 	head->id = id;
-	head->seq = seq; 
+	head->seq = seq;
 	head->windowSize = windowSize;
 	head->crc = crc;
-	strcpy(head->data, data); 
+	strcpy(head->data, data);
 }
 
 //AcceptedClientlist
 void addClient(AccClientListHead * head, struct sockaddr_in remaddr, int id )
 {
-	printf("Mwoa\n");
+	printf("In add Client\n");
 	fflush(stdout);
 	//AcceptedClients * temp;
-	
+
+	//ÄR DU SÄKER PÅ ATT DU SÄTTER ALLT? BARA FRÅGAR JAG HAR INTE KOLL
 	AcceptedClients * toAdd;
 	toAdd = (AcceptedClients*) malloc(sizeof(AcceptedClients));
-	toAdd->remaddr = remaddr; 
-	toAdd->id = id; 
-	toAdd->timerTime = clock(); 
-	toAdd->msgs = NULL; 
+	//borde kanske använda memcpy för att det finns en array i sockaddr_in
+	toAdd->remaddr = remaddr;
+	toAdd->id = id;
+	toAdd->timerTime = clock();
+	toAdd->msgs = NULL;
 	toAdd->synAckAck = 0;
 	toAdd->finAck = 0;
-	pthread_mutex_init(&(toAdd->mutex),NULL); 
-	
+	pthread_mutex_init(&(toAdd->mutex),NULL);
+	//INLAGD AV IDA!
+	toAdd->next = NULL;
+
+	//TODO: FRÅGA ÄR DET JAG SOM ÄR KORKAD ELLER ÄR INTE DET HÄR LITE GALET? VAD STÅR DET?
+	// if(head == NULL)
+	// {
+	// 	toAdd->next = NULL;
+	// }
+	// else
+	// {
+	// 	toAdd->next = head->head;
+	// }
+	// head->head = toAdd;
+	// //head->head->syn = (pthread_t *)malloc(sizeof(pthread_t));
+
+	//IDAS VERSION!
+	printf("In Idas version!\n");
 	if(head == NULL)
 	{
-		toAdd->next = NULL; 		
+		printf("never malloced right in main\n");
+		exit(EXIT_FAILURE);
 	}
-  
 	else
 	{
-		toAdd->next = head->head; 		
+		AcceptedClients *node = head->head;
+		if(node == NULL)
+		{
+			node = toAdd;
+		}
+		while(node->next != NULL)
+		{
+			node = node->next;
+		}
+		node->next = toAdd;
 	}
-	head->head = toAdd; 
-	//head->head->syn = (pthread_t *)malloc(sizeof(pthread_t));
-	
-	
+
+
+
 	printf("done\n");
 	fflush(stdout);
 }
 
 AcceptedClients * findClient(AcceptedClients * client, struct sockaddr_in remaddr, int id )
 {
-	printf("huh?\n");
+	//Ehhhhhhh blir den inte alltid Null om det är första meddelandet? du sätter den aldrig?
+	printf("In findClient()\n");
 	fflush(stdout);
 	if(client == NULL)
 	{
-		printf("client null\n");
+		printf("client is null\n");
 		fflush(stdout);
-		return NULL; 
+		return NULL;
 	}
 	if(client->remaddr.sin_addr.s_addr == remaddr.sin_addr.s_addr && client->id == id)
 	{
 		printf("client found\n");
 		fflush(stdout);
-		return client; 
+		return client;
 	}
 	else
 	{
-		printf("you turn me right round bby right round\n");
+		printf("Not found yet\n");
 		fflush(stdout);
-		return findClient( client->next, remaddr, id ); 
+		return findClient(client->next, remaddr, id);
 	}
 	printf("oh nooooooo\n");
 	fflush(stdout);
@@ -75,65 +102,65 @@ AcceptedClients * findClientBefore(AcceptedClients * client, struct sockaddr_in 
 {
 	if(client == NULL)
 	{
-		return NULL; 
+		return NULL;
 	}
 	else if (client->next->remaddr.sin_addr.s_addr == remaddr.sin_addr.s_addr && client->next->id == id)
 	{
-		return client; 
+		return client;
 	}
 	else
 	{
-		return findClientBefore(client->next, remaddr,id); 
+		return findClientBefore(client->next, remaddr,id);
 	}
-	return NULL; 
+	return NULL;
 }
 
 int removeClient(AccClientListHead * clientHead, struct sockaddr_in remaddr, int id)
 {
-	AcceptedClients * clientToRemove = findClient(clientHead->head, remaddr, id ); 
+	AcceptedClients * clientToRemove = findClient(clientHead->head, remaddr, id );
 	if(clientToRemove == clientHead->head)
 	{
-		clientHead->head = clientToRemove->next; 
-		clientToRemove->next = NULL; 
+		clientHead->head = clientToRemove->next;
+		clientToRemove->next = NULL;
 		free(clientToRemove);
-		return 1; 
+		return 1;
 	}
 	AcceptedClients * clientbefore = findClientBefore(clientHead->head, remaddr, id );
 	if (clientbefore == NULL)
 	{
-		return -1; 
+		return -1;
 	}
-	else 
+	else
 	{
-		clientbefore->next = clientToRemove->next; 
-		clientToRemove->next = NULL; 
+		clientbefore->next = clientToRemove->next;
+		clientToRemove->next = NULL;
 		free(clientToRemove);
-		return 1; 
+		return 1;
 	}
-	return -1; 
-	
+	return -1;
+
 }
 
 void addMsgToClient(AcceptedClients * client, DataHeader * msg)
 {
-	ClientMsgList * temp; 
+	ClientMsgList * temp;
 	if (client->msgs == NULL)
 	{
 		client->msgs->seq = msg->seq;
 		strcpy(client->msgs->data, msg->data);
-		client->msgs->next = NULL; 
+		client->msgs->next = NULL;
 		client->msgs->last = 1;
-		client->msgs->prev = NULL; 
-		
+		client->msgs->prev = NULL;
+
 	}
-	else 
+	else
 	{
-		temp = client->msgs; 
+		temp = client->msgs;
 		client->msgs->seq = msg->seq;
 		strcpy(client->msgs->data, msg->data);
-		temp->prev = client->msgs; 
+		temp->prev = client->msgs;
 		client->msgs->next = temp;
-		client->msgs->last = 0; 
+		client->msgs->last = 0;
 	}
 }
 
@@ -141,15 +168,15 @@ ClientMsgList * findTheFirstMsg(ClientMsgList * msg)
 {
 	if(msg == NULL)
 	{
-		return NULL; 
+		return NULL;
 	}
 	else if (msg->last == 1)
 	{
-		return msg; 
+		return msg;
 	}
-	else 
+	else
 	{
-		return findTheFirstMsg(msg->next); 
+		return findTheFirstMsg(msg->next);
 	}
 	return NULL;
 }
@@ -157,18 +184,18 @@ ClientMsgList * findTheFirstMsg(ClientMsgList * msg)
 void printMsg(ClientMsgList * firstMsg)//firstMsg = client->msgs
 {
 	ClientMsgList * msg = findTheFirstMsg(firstMsg);
-	int seq = msg->seq; 
-	
+	int seq = msg->seq;
+
 	printf("------- Message Recived -------\n");
-	printf ("\n%s ", msg->data); 
-	
+	printf ("\n%s ", msg->data);
+
 	while(msg != NULL)
 	{
-		
-		msg = getMsgToPrint(firstMsg, seq); 
-		seq = msg->seq; 
-		printf ("%s ", msg->data); 
-		
+
+		msg = getMsgToPrint(firstMsg, seq);
+		seq = msg->seq;
+		printf ("%s ", msg->data);
+
 	}
 
 }
@@ -177,23 +204,23 @@ void removeMsg(ClientMsgList * msg)
 {
 	if(msg->next != NULL)
 	{
-		msg->next->prev = msg->prev; 	
+		msg->next->prev = msg->prev;
 	}
-	
+
 	if(msg->prev != NULL)
 	{
-		msg->prev->next = msg->next; 
+		msg->prev->next = msg->next;
 	}
-	
-	msg->next = NULL; 
-	msg->prev = NULL; 
+
+	msg->next = NULL;
+	msg->prev = NULL;
 }
 
 ClientMsgList * getMsgToPrint (ClientMsgList * msg, int seq)
 {
 	if(msg->seq == (seq+1))
 	{
-		return msg; 
+		return msg;
 	}
 	else
 	{
@@ -202,56 +229,53 @@ ClientMsgList * getMsgToPrint (ClientMsgList * msg, int seq)
 	return NULL;
 }
 
-
-
-//ListFuncs
-
+//ListFuncs///////////////////////////////////////////////////////////////////////////////////////////////////
 ListHead * createListHead()
 {
-	ListHead * head; 
-	if ((head = (ListHead *)malloc(sizeof(ListHead))) == NULL) 
+	ListHead * head;
+	if ((head = (ListHead *)malloc(sizeof(ListHead))) == NULL)
 	{
 		printf("Cant malloc ListHead: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	head->head = NULL; 
-	return head; 
+	head->head = NULL;
+	return head;
 }
 
 ListNode * createListNode(DataHeader * msg)
 {
-	ListNode * node; 
-	if((node = (ListNode * )malloc(sizeof(ListNode)))== NULL) 
+	ListNode * node;
+	if((node = (ListNode * )malloc(sizeof(ListNode)))== NULL)
 	{
 		printf("Cant malloc node: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	node->msg.flag = msg->flag; 
-	node->msg.id = msg->id; 
-	node->msg.seq = msg->seq; 
-	node->msg.windowSize = msg->windowSize; 
-	node->msg.crc = msg->crc; 
+	node->msg.flag = msg->flag;
+	node->msg.id = msg->id;
+	node->msg.seq = msg->seq;
+	node->msg.windowSize = msg->windowSize;
+	node->msg.crc = msg->crc;
 	strcpy(node->msg.data, msg->data);
-	node->next = NULL; 
-	return node; 
+	node->next = NULL;
+	return node;
 }
 
 void addNodeToList(ListHead * head, DataHeader * msg)
 {
 	ListNode * temp = head->head;
 	head->head = createListNode(msg);
-	head->head->next = temp; 
-	
+	head->head->next = temp;
+
 }
 
 void removeAllNodesFromList(ListHead * head)
 {
 	while (head->head != NULL)
 	{
-		ListNode * temp = head->head->next; 
+		ListNode * temp = head->head->next;
 		free(head->head);
 		head->head = temp;
-		removeAllNodesFromList(head); 
+		removeAllNodesFromList(head);
 	}
 }
 
@@ -259,13 +283,13 @@ int searchList(ListNode * node, int seqNr)
 {
 	if(node == NULL)
 	{
-		return -1; 
+		return -1;
 	}
 	else if (node->msg.seq == seqNr)
 	{
-		return 1; 
+		return 1;
 	}
-	else 
+	else
 	{
 		searchList(node->next, seqNr);
 	}
@@ -310,7 +334,7 @@ void createMessages(MsgList *head, int id, int seqStart, int windowSize)
 		node->acked = 0;
 		node->data = (DataHeader*)malloc(sizeof(DataHeader));
 		snprintf(str, sizeof(str), "%d", i);//just helps to set the message to the number of the message
-		createDataHeader(2, id, i, windowSize, getCRC(sizeof(str), str), str, node->data);
+		createDataHeader(2, id, i, windowSize, getCRC(strlen(str), str), str, node->data);
 		node->next = NULL;
 		node = node->next;
 	}
@@ -346,37 +370,37 @@ void * finTimer(void * arg)
 	{
 		printf("Error in type");
 	}
-	
+
 	DataHeader * outgoingMsg = NULL;
-	char * msg; 
-	FinArg * finArgs = arg; 
+	char * msg;
+	FinArg * finArgs = arg;
 	ArgForThreads * temp = finArgs->args;
 	AcceptedClients * tempClient = finArgs->client;
 	struct sockaddr_in tempAddr = temp->remaddr;
-	
+
 	clock_t time = (clock_t )tempClient->timerTime;
-	clock_t currentTime = clock() + time; 
-	
+	clock_t currentTime = clock() + time;
+
 	while(1)
 	{
 		while (clock() < currentTime);
-		
+
 		if(tempClient->finAck == 1)
 		{
-			break; 
+			break;
 		}
-		
-		msg = "This is an Fin "; 
-		createDataHeader(4,  temp->incommingMsg.id, temp->incommingMsg.seq, finArgs->win, getCRC(strlen(msg), msg), msg, outgoingMsg); 
-		sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
+
+		msg = "This is an Fin ";
+		createDataHeader(4,  temp->incommingMsg.id, temp->incommingMsg.seq, finArgs->win, getCRC(strlen(msg), msg), msg, outgoingMsg);
+		sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen);
 	}
-	return (void *) 1; 
+	return (void *) 1;
 }
 
 void * synTimer(void * arg)
 {
 	printf("plehe");
-	fflush(stdout); 
+	fflush(stdout);
 	int type = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	if (type != 0)
 	{
@@ -393,38 +417,36 @@ void * synTimer(void * arg)
 	ArgForThreads * temp = finArgs->args;
 	AcceptedClients * tempClient = finArgs->client;
 	struct sockaddr_in tempAddr = temp->remaddr;
-	
-//	clock_t time = (clock_t )tempClient->timerTime;
-	//clock_t currentTime = clock() + time; 
-	
+
+	//	clock_t time = (clock_t )tempClient->timerTime;
+	//clock_t currentTime = clock() + time;
+
 	while (1)
 	{
-		sleep(2);	
-		
+		sleep(2);
+
 		if(tempClient->synAckAck == 1)
 		{
-			break; 
+			break;
 		}
 		else
 		{
-			char * msg = "This is an SynAck"; 
-			createDataHeader(1, temp->incommingMsg.id, temp->incommingMsg.seq, finArgs->win, temp->incommingMsg.crc, msg , outgoingMsg); 
-			sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
+			char * msg = "This is an SynAck";
+			createDataHeader(1, temp->incommingMsg.id, temp->incommingMsg.seq, finArgs->win, temp->incommingMsg.crc, msg , outgoingMsg);
+			sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen);
 		}
 	}
-	return (void *) 1; 
+	return (void *) 1;
 }
 
 ///////////////////////////////ErrorChecking//////////////////////////////////////////////////////////////////////
 
-
-
 //convert char to bit
 void convertChar (int * bitArr, int arrSize, char * msg)
 {
-	int i, j; 
-	unsigned short k; 
-	k = msg[0]; 
+	int i, j;
+	unsigned short k;
+	k = msg[0];
 	printf("k = %d\n", k);
 	printf("bitArr = ");
 	for (j = 0; j < arrSize; j++)
@@ -441,56 +463,55 @@ void convertChar (int * bitArr, int arrSize, char * msg)
 
 unsigned short getCRC (int msgSize, char * msg)
 {
-	int i, bitIndex, testBit, xorFlag = 0; 
-	unsigned short rest = 0xff, chOfMsg; 
-	
+	int i, bitIndex, testBit, xorFlag = 0;
+	unsigned short rest = 0xff, chOfMsg;
+
 	for (i = 0; i < msgSize; i++)
 	{
-		chOfMsg = msg[i]; 
+		chOfMsg = msg[i];
 		testBit = 0x80;
-		
+
 		//printf("ch = %d ", chOfMsg);
 		for(bitIndex = 0; bitIndex < 8; bitIndex++)
 		{
-			//Checks if first bit is 1 if it is then a xor should be done 
+			//Checks if first bit is 1 if it is then a xor should be done
 			if (rest & 0x80)
 			{
-				xorFlag = 1; 
+				xorFlag = 1;
 			}
 			else
 			{
-				xorFlag = 0;  
+				xorFlag = 0;
 			}
-			
-			rest = rest << 1; //move and add a 0 
-			
-			if (chOfMsg & testBit) //if the bit is 1 add 1 to rest (replaces the 0 above with a 1) 
+
+			rest = rest << 1; //move and add a 0
+
+			if (chOfMsg & testBit) //if the bit is 1 add 1 to rest (replaces the 0 above with a 1)
 			{
-				rest = rest + 1; 
+				rest = rest + 1;
 			}
-			
+
 			if (xorFlag) // makes the divide if the checked bit is 1
 			{
-				rest = rest ^ POLY; 
+				rest = rest ^ POLY;
 			}
-			
+
 			testBit = testBit >> 1; //move so that it checks the next bit
-			//printf("%d ", rest); 
+			//printf("%d ", rest);
 		}
-		//printf("\n"); 
+		//printf("\n");
 	}
 	//printf("\n final rest = %d\n\n", rest);
 	return rest;
-}	
+}
 
 unsigned short calcError (unsigned short crc, int msgSize, char * msg)
 {
 	//printf("CRC from client %d\n", crc);
 	//printf("msgSize: %d\n", msgSize);
-	unsigned short rest; 
-	rest = getCRC(msgSize, msg); 
-	rest = rest - crc; 
+	unsigned short rest;
+	rest = getCRC(msgSize, msg);
+	rest = rest - crc;
 	//printf("\n final rest in Error = %d\n\n", rest);
 	return rest;
-}	
-
+}
