@@ -79,6 +79,8 @@ AcceptedClients * findClientBefore(AcceptedClients * client, struct sockaddr_in 
 
 int removeClient(AccClientListHead * clientHead, struct sockaddr_in remaddr, int id)
 {
+	printf("remove\n");
+		fflush(stdout);
 	AcceptedClients * clientToRemove = findClient(clientHead->head, remaddr, id ); 
 	if(clientToRemove == clientHead->head)
 	{
@@ -168,8 +170,8 @@ void printMsg(ClientMsgList * firstMsg)//firstMsg = client->msgs
 	printf("------- Message Recived -------\n");
 	if(msg != NULL)
 	{
-		printf ("Its not null\n "); 
-		fflush(stdout); 
+		//printf ("Its not null\n "); 
+		//fflush(stdout); 
 		printf ("\n%s ", msg->data); 
 		fflush(stdout); 
 	}
@@ -180,14 +182,23 @@ void printMsg(ClientMsgList * firstMsg)//firstMsg = client->msgs
 	}
 	while(msg != NULL)
 	{
-		
+		printf("hello\n");
+		fflush(stdout);
 		msg = getMsgToPrint(firstMsg, seq); 
+		if(msg == NULL)
+		{
+			printf("break\n");
+		fflush(stdout);
+			break;
+		}
 		seq = msg->seq; 
 		printf ("%s ", msg->data); 
 		
 	}
 	printf("\n");
 		fflush(stdout); 
+	printf("heme\n");
+		fflush(stdout);
 
 }
 
@@ -297,16 +308,17 @@ void setAck(MsgList * head, int seq, int windowSize)
 	MsgList * Node = head; 
 	for(i = 0; i<windowSize; i++)
 	{
-		printf("setAck forLoop %d\n", i);
+		printf("setAck forLoop %d\n seq = %d\n seq in data = %d\n", i, seq, Node->data->seq);
 				  fflush(stdout);
 		//TODO: mutex stuff
-		if(Node->data->seq == seq && Node->sent)
+		if(Node->data->seq == seq && Node->sent && Node->acked != 1 )
 		{
-			printf("funkar ej? \n");
-				  fflush(stdout);
+			
 			//funkar ej ?
-			pthread_cancel(Node->thread);
+			//pthread_cancel(Node->thread);
 			Node->acked = 1;
+			printf("ajfbllllllllllllllllllllllllllllllllllldfjsajdilsajidjsadjjjjjjjjgggggggggggggggggggggg \n");
+				  fflush(stdout);
 			break;
 		}
 		else if(Node->next != NULL)
@@ -320,7 +332,7 @@ MsgList *createMessages(MsgList *head, int id, int seqStart, int windowSize)
 {
 	int msgLength = 0;
 	int i;
-	char str[10] = "ja";	
+	char str[10];	
 	MsgList *node;
 	MsgList * temp = head;
 
@@ -335,9 +347,8 @@ MsgList *createMessages(MsgList *head, int id, int seqStart, int windowSize)
 		node =(MsgList*)malloc(sizeof(MsgList));
 		node->sent = 0;
 		node->acked = 0;
-		node->data = (DataHeader*)malloc(sizeof(DataHeader)); 
-		//snprintf(str, sizeof(str), "%d", i);//just helps to set the message to the number of the message
-		//str = " ja "; 
+		node->data = (DataHeader*)malloc(sizeof(DataHeader));
+		snprintf(str, sizeof(str), "%d", i);//just helps to set the message to the number of the message
 		createDataHeader(2, id, i, windowSize, getCRC(strlen(str), str), str, node->data);
 		node->next = NULL;
 		
@@ -374,8 +385,11 @@ MsgList *removeFirstUntilNotAcked(MsgList *head, int *sendPermission)
 {
 	MsgList *node = head;
 
+	printf("head seq: %d\n", head->data->seq);
+			fflush(stdout);
 	while(node != NULL)
 	{
+		
 		if(node->acked)
 		{
 			printf("acked\n");

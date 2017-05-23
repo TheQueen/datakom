@@ -12,12 +12,12 @@
 #include "header.h"
 
 #define PORT 5555
-#define HOST_NAME_LENGTH 50
 
-char hostName[HOST_NAME_LENGTH];
 MsgList *head = NULL;                                 //Needs lots of mutex -_-
-struct sockaddr_in sendToSock;                        //The address/socket we send data to - needs to be here to be checked by receiveThread
-int fdSend;
+struct sockaddr_in remaddr;
+socklen_t addrlen = sizeof(remaddr);
+int fd;
+char *server = "127.0.0.1";	/* change this to use a different server */
 int sendPermission = 0;
 int connectionId = 0;
 int windowSize = 0;
@@ -32,9 +32,9 @@ clock_t roundTripTime = 0;
 clock_t timer = 0;
 
 int createSock();
-void initSockSendto(struct sockaddr_in *myaddr, int fd, int port, char *host);
-void initSockReceiveOn(struct sockaddr_in *myaddr, int fd, int port);
-void * connectionThread(void * fdSend);
+void initSockReceiveOn(int fd, int port);
+void initSockSendTo(int port);
+void * connectionThread(void * arg);
 void * sendThread(void * arg);
 void * receiveThread(void * arg);
 int errorCheck(DataHeader *buffer);
@@ -42,17 +42,14 @@ int errorCheck(DataHeader *buffer);
 int main(int argc, char *argv[])
 {
     pthread_t reader, writer;
-    /* Check arguments */
-    if(argv[1] == NULL)
+
+    if((fd = createSock()) == 0)
     {
-      printf("Error: no host name\n");
+      printf("fd not created\n");
       exit(EXIT_FAILURE);
     }
-    else
-    {
-      strncpy(hostName, argv[1], HOST_NAME_LENGTH);
-      hostName[HOST_NAME_LENGTH - 1] = '\0';
-    }
+    initSockReceiveOn(fd, 0);
+    initSockSendTo(PORT);
 
     pthread_mutex_init(&mutex, NULL);
 
@@ -72,70 +69,41 @@ int main(int argc, char *argv[])
 
 int createSock()
 {
-    int fd = -1;
-
-    if( (fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
-    {
-        perror("cannot create socket\n");
-        exit(EXIT_FAILURE);
-    }
-    return fd;
+	int fd;
+	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		perror("cannot create socket\n");
+		return 0;
+	}
+	return fd;
 }
-
-void initSockSendto(struct sockaddr_in *myaddr, int fd, int port, char *host)
+void initSockReceiveOn(int fd, int port)
 {
-    /* bind to an arbitrary return address */
-    /* because this is the client side, we don't care about the address */
-    /* since no application will initiate communication here - it will */
-    /* just send responses */
-    /* INADDR_ANY is the IP address and 0 is the socket */
-    /* htonl converts a long integer (e.g. address) to a network representation */
-    /* htons converts a short integer (e.g. port) to a network representation */
+	struct sockaddr_in myaddr;	/* our address */
+	/* bind it to all local addresses and pick any port number */
+	memset((char *)&myaddr, 0, sizeof(myaddr));
+	myaddr.sin_family = AF_INET;
+	myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	myaddr.sin_port = htons(port);
 
-    struct hostent *hp;     /* host information */
-    /* look up the address of the server given its name */
-    hp = gethostbyname(host);
-    if (!hp)
-    {
-    	perror("could not obtain address of\n");
-    	exit(EXIT_FAILURE);
-    }
-
-    memset((char *)myaddr, 0, sizeof(*myaddr));
-    myaddr->sin_family = AF_INET;
-    myaddr->sin_addr.s_addr = htonl(INADDR_ANY);
-    myaddr->sin_port = htons(port);
-    memcpy((void *)&myaddr->sin_addr, hp->h_addr_list[0], hp->h_length);
-
-    // if (bind(fd, (struct sockaddr *)myaddr, sizeof(*myaddr)) < 0)
-    // {
-    //     perror("bind failed");
-    //     exit(EXIT_FAILURE);
-    //
-    // }
+	if (bind(fd, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
+	{
+		printf("bind failed");
+		exit(EXIT_FAILURE);
+	}
 }
-
-void initSockReceiveOn(struct sockaddr_in *myaddr, int fd, int port)
+void initSockSendTo(int port)
 {
-    /* bind to an arbitrary return address */
-    /* because this is the client side, we don't care about the address */
-    /* since no application will initiate communication here - it will */
-    /* just send responses */
-    /* INADDR_ANY is the IP address and 0 is the socket */
-    /* htonl converts a long integer (e.g. address) to a network representation */
-    /* htons converts a short integer (e.g. port) to a network representation */
+	/* now define remaddr, the address to whom we want to send messages */
+	/* For convenience, the host address is expressed as a numeric IP address */
+	/* that we will convert to a binary format via inet_aton */
 
-
-    memset((char *)myaddr, 0, sizeof(*myaddr));
-    myaddr->sin_family = AF_INET;
-    myaddr->sin_addr.s_addr = htonl(INADDR_ANY);
-    myaddr->sin_port = htons(port);
-
-    if (bind(fd, (struct sockaddr *)myaddr, sizeof(*myaddr)) < 0)
-    {
-        perror("bind failed");
-        exit(EXIT_FAILURE);
-    }
+	memset((char *) &remaddr, 0, sizeof(remaddr));
+	remaddr.sin_family = AF_INET;
+	remaddr.sin_port = htons(port);
+	if (inet_aton(server, &remaddr.sin_addr)==0) {
+		fprintf(stderr, "inet_aton() failed\n");
+		exit(1);
+	}
 }
 
 void * connectionThread(void *arg)
@@ -145,9 +113,6 @@ void * connectionThread(void *arg)
   DataHeader fin;
   DataHeader finack;
   MsgList *currentNode = NULL;
-
-  fdSend = createSock();
-  initSockSendto(&sendToSock, fdSend, PORT, hostName);
 
   ////////////////////////////////////SYN////////////////////////////////////////////////
   createDataHeader(0, 0, 0, 0, getCRC(strlen("SYN"), "SYN"), "SYN", &syn);
@@ -164,7 +129,7 @@ void * connectionThread(void *arg)
       }
     }
     //Send syn to server
-    if (sendto(fdSend, &syn, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
+    if (sendto(fd, &syn, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, addrlen) < 0)
     {
       printf("syn failed\n");
       exit(EXIT_FAILURE);
@@ -181,7 +146,7 @@ void * connectionThread(void *arg)
   {
     connectionPhase = 2;
     //Send synackack to server
-    if (sendto(fdSend, &synack, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
+    if (sendto(fd, &synack, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, addrlen) < 0)
     {
       printf("syn failed\n");
       exit(EXIT_FAILURE);
@@ -194,7 +159,7 @@ void * connectionThread(void *arg)
 
   printf("\nConnected to receiver!\n");
   /////////////////////////////message sending/////////////////////////////////////////
-  
+
 	//head = (MsgList*)malloc(sizeof(MsgList));
   while (1)
   {
@@ -211,14 +176,15 @@ void * connectionThread(void *arg)
     while (1)
     {
 		//printf("while\n");
-		fflush(stdout); 
+		fflush(stdout);
       if (pthread_mutex_trylock(&mutex))
       {
         if(sendPermission < windowSize && currentNode != NULL)
         {
 			printf("msg sent\n");
-			fflush(stdout); 
+			fflush(stdout);
           pthread_create(&currentNode->thread, NULL, sendThread, (void*)currentNode);
+            sendPermission = sendPermission + 1; 
           currentNode = currentNode->next;
         }
         pthread_mutex_unlock(&mutex);
@@ -245,10 +211,10 @@ void * connectionThread(void *arg)
     {
         printf("breaking\n");
       fflush(stdout);
-        break; 
+        break;
     }
   }
-	
+
   createDataHeader(4, connectionId, 0, windowSize, getCRC(strlen("FINACK"), "FINACK"), "FINACK", &finack);
   while(connectionPhase == 5)
   {
@@ -256,7 +222,7 @@ void * connectionThread(void *arg)
       fflush(stdout);
     connectionPhase = 6;
     //Send synackack to server
-    if (sendto(fdSend, &finack, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
+    if (sendto(fd, &finack, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, addrlen) < 0)
     {
       printf("finack failed\n");
       exit(EXIT_FAILURE);
@@ -266,10 +232,8 @@ void * connectionThread(void *arg)
     //wait timer
     clock_t timer = clock() + roundTripTime;
     while (clock() < timer);
-	 // sleep(10);
+	 //sleep(1);
   }
-  close(fdSend);
-
   return NULL;
 }
 
@@ -280,15 +244,19 @@ void * sendThread(void * arg)
 	{
 		printf("Error in type\n");
 	}
-  while(1)
+  while(((MsgList*)arg)->acked == 0)
   {
     while (1)
     {
+         if(((MsgList*)arg)->acked != 0)
+        {
+            break;
+        }
       if (pthread_mutex_trylock(&mutex))
       {
         if((MsgList*)arg != NULL)
         {
-          if (sendto(fdSend, ((MsgList*)arg)->data, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
+          if (sendto(fd, ((MsgList*)arg)->data, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, addrlen) < 0)
           {
             printf("send failed\n");
             exit(EXIT_FAILURE);
@@ -297,37 +265,32 @@ void * sendThread(void * arg)
         pthread_mutex_unlock(&mutex);
         break;
       }
+       
     }
-      ((MsgList*)arg)->sent = 1; 
+    ((MsgList*)arg)->sent = 1;
     //wait timer
     clock_t timer = clock() + roundTripTime;
     while (clock() < timer);
-	//sleep(10);
+	//sleep(1);
   }
   return NULL;
 }
 
 void * receiveThread(void * arg)
 {
-  int fdReceive;
   int bytesReceived = 0;
-  struct sockaddr_in remaddr;
-  socklen_t addrlen = sizeof(remaddr);
-  struct sockaddr_in receiveOnSock;                     //The address/socket we received on
   DataHeader buffer;
   printf("In receiveThread\n");
 	fflush(stdout);
 
-  fdReceive = createSock();
-  initSockReceiveOn(&receiveOnSock, fdReceive, 5732);
 
-	  printf("created recv socket\n");
+	printf("created recv socket\n");
 	fflush(stdout);
   while(connectionPhase < 6)
   {
-	    printf("before recvfrom\n");
-	fflush(stdout);
-    bytesReceived = recvfrom(fdReceive, &buffer, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, &addrlen);
+	  printf("before recvfrom\n");
+	  fflush(stdout);
+    bytesReceived = recvfrom(fd, &buffer, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, &addrlen);
     //Add check for address that we received from
 	  printf("flag: %d. msg from recv: %s\n", buffer.flag, buffer.data);
 	  printf("connectionPhase: %d\n", connectionPhase);
@@ -367,20 +330,25 @@ void * receiveThread(void * arg)
         case 2:
           //MSGACK
           //check connectionId if 0 then dont do stuff if not 0 do stuff
-			  printf("msg ack goten \n");
-			  fflush(stdout);
+  			  //printf("msg ack goten \n");
+  			  //fflush(stdout);
           if(connectionPhase == 2 && head != NULL)
           {
-			  printf("yes \n");
-			  fflush(stdout);
+    			  //printf("yes \n");
+    			  //fflush(stdout);
             while (1)
             {
-				printf("blw \n");
-			  fflush(stdout);
+      				//printf("blw \n");
+      			  //fflush(stdout);
               if (pthread_mutex_trylock(&mutex))
               {
-				  printf("set ack \n");
-			  fflush(stdout);
+        				//printf("set ack \n buffer: %d\n data: %d\n", buffer.seq, head->data->seq);
+        			  //fflush(stdout);
+                if(buffer.seq < head->data->seq)
+                {
+                    //ack allready gotten
+                    break;
+                }
                 setAck(head, buffer.seq, windowSize);
                 head = removeFirstUntilNotAcked(head, &sendPermission);
                 pthread_mutex_unlock(&mutex);
@@ -398,13 +366,17 @@ void * receiveThread(void * arg)
           if (connectionPhase == 6)
           {
             connectionPhase = 5;
+              return NULL;
           }
+              
           break;
         case 4:
           //FINACK
           if(connectionPhase == 3)
           {
-            pthread_cancel(node.thread);
+            //pthread_cancel(node.thread);
+              node.acked = 1; 
+               
           }
           break;
         default:
@@ -412,6 +384,5 @@ void * receiveThread(void * arg)
       }
     }
   }
-  close(fdReceive);
   return NULL;
 }
