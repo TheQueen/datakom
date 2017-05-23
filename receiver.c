@@ -17,6 +17,7 @@
 #define HOST_NAME_LENGTH 50
 #define BUFSIZE 2048
 #define WINDOWSIZE 3 
+#define MAXPTHREAD 100000
 
 
 
@@ -46,7 +47,7 @@ int main(int argc, char *argv[])
 	pthread_mutex_init(&mutex, NULL);
 	//variables
 	//head = createListHead();
-	pthread_t listener; 
+	pthread_t listener;// = (pthread_t* )malloc(sizeof(pthread_t)) ; 
 	ArgForThreads args; 
 	
 	if(argv[1] == NULL)
@@ -102,7 +103,7 @@ void * listenFunc(void * args)
 	while (1) 
 	{
 		bla = (ArgForThreads *) malloc(sizeof(ArgForThreads));
-		bla  = (ArgForThreads*) args; 
+		*bla  = *((ArgForThreads*) args); 
 		if( bla == NULL)
 		{
 			printf("FFFFFFFFFFF\n");
@@ -134,6 +135,8 @@ void * listenFunc(void * args)
 				printf("flag = %d\n", bla->incommingMsg.flag);
 				fflush(stdout);
 				pthread_create(&msg, NULL, handleMsg, bla); 
+				printf("after pthread\n");
+				fflush(stdout);
 			}
 		}
 		
@@ -151,11 +154,11 @@ void * handleMsg (void * args)
 	fflush(stdout);
 	int sent; 
 	DataHeader * outgoingMsg = (DataHeader *) malloc(sizeof(DataHeader));
-	ArgForThreads * temp = (ArgForThreads*)malloc(sizeof(ArgForThreads));
+	ArgForThreads * temp ;//= (ArgForThreads*)malloc(sizeof(ArgForThreads));
 	
 	temp = (ArgForThreads*) args; 
 		
-	DataHeader * incommingMsg = (DataHeader *) malloc (sizeof(DataHeader));
+	DataHeader * incommingMsg ;//= (DataHeader *) malloc (sizeof(DataHeader));
 	incommingMsg->seq = temp->incommingMsg.seq; 
 	incommingMsg->flag =  temp->incommingMsg.flag;
 	incommingMsg->id =  temp->incommingMsg.id;
@@ -515,8 +518,8 @@ void * handleMsg (void * args)
 					fflush(stdout);
 					while(1)
 					{
-						while (clock() < currentTime);
-						
+						//while (clock() < currentTime);
+						sleep(5); 
 						if(tempClient->finAck == 1)
 						{
 							break; 
@@ -524,7 +527,7 @@ void * handleMsg (void * args)
 
 						msg = "This is an Fin "; 
 						createDataHeader(3,  temp->incommingMsg.id, temp->incommingMsg.seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg, outgoingMsg); 
-						sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
+						sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen); 
 						printf("resent fin\n");
 						fflush(stdout);
 					}
@@ -537,7 +540,8 @@ void * handleMsg (void * args)
 		
 		case 4:
 			//received fin ack
-			
+			printf("case 4\n");
+			fflush(stdout);
 			while(1)
 			{
 				if(pthread_mutex_trylock(&mutex))
@@ -552,7 +556,7 @@ void * handleMsg (void * args)
 			removeClient(clients,tempAddr,incommingMsg->id);
 			break;
 	}
-	//free(temp); 
+	free(temp); 
 	//free(incommingMsg); 
 	//free(outgoingMsg);
 	close(sendFd);

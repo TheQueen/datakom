@@ -320,7 +320,7 @@ MsgList *createMessages(MsgList *head, int id, int seqStart, int windowSize)
 {
 	int msgLength = 0;
 	int i;
-	char str[10];	
+	char str[10] = "ja";	
 	MsgList *node;
 	MsgList * temp = head;
 
@@ -335,8 +335,9 @@ MsgList *createMessages(MsgList *head, int id, int seqStart, int windowSize)
 		node =(MsgList*)malloc(sizeof(MsgList));
 		node->sent = 0;
 		node->acked = 0;
-		node->data = (DataHeader*)malloc(sizeof(DataHeader));
-		snprintf(str, sizeof(str), "%d", i);//just helps to set the message to the number of the message
+		node->data = (DataHeader*)malloc(sizeof(DataHeader)); 
+		//snprintf(str, sizeof(str), "%d", i);//just helps to set the message to the number of the message
+		//str = " ja "; 
 		createDataHeader(2, id, i, windowSize, getCRC(strlen(str), str), str, node->data);
 		node->next = NULL;
 		
