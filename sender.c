@@ -170,18 +170,18 @@ void * connectionThread(void *arg)
       exit(EXIT_FAILURE);
     }
     printf("Sent SYN\n");
-    sleep(10);
+    sleep(1);
   }
 
   ////////////////////////////////////SYNACKACK////////////////////////////////////////////
   //create SYNACK
-  createDataHeader(1, connectionId, seqStart, windowSize, getCRC(sizeof("SYNACK"), "SYNACK"), "SYNACK", &synack);
+  createDataHeader(1, connectionId, seqStart, windowSize, getCRC(strlen("SYNACK"), "SYNACK"), "SYNACK", &synack);
 
   while(connectionPhase == 1)
   {
     connectionPhase = 2;
     //Send synackack to server
-    if (sendto(fdSend, &syn, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
+    if (sendto(fdSend, &synack, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
     {
       printf("syn failed\n");
       exit(EXIT_FAILURE);
@@ -194,24 +194,30 @@ void * connectionThread(void *arg)
 
   printf("\nConnected to receiver!\n");
   /////////////////////////////message sending/////////////////////////////////////////
-  currentNode = head;
+  
+	//head = (MsgList*)malloc(sizeof(MsgList));
   while (1)
   {
     if (pthread_mutex_trylock(&mutex))
     {
-      createMessages(head, connectionId, seqStart, windowSize);
+      head = createMessages(head, connectionId, seqStart+1, windowSize);
       pthread_mutex_unlock(&mutex);
       break;
     }
   }
+	currentNode = head;
   while(head != NULL)
   {
     while (1)
     {
+		//printf("while\n");
+		fflush(stdout); 
       if (pthread_mutex_trylock(&mutex))
       {
         if(sendPermission < windowSize && currentNode != NULL)
         {
+			printf("msg sent\n");
+			fflush(stdout); 
           pthread_create(&currentNode->thread, NULL, sendThread, (void*)currentNode);
           currentNode = currentNode->next;
         }
@@ -224,7 +230,7 @@ void * connectionThread(void *arg)
   connectionPhase = 3;
 
   //////////////////////////closing connection//////////////////////////////////
-  createDataHeader(3, connectionId, 0, windowSize, getCRC(sizeof("FIN"), "FIN"), "FIN", &fin);
+  createDataHeader(3, connectionId, 0, windowSize, getCRC(strlen("FIN"), "FIN"), "FIN", &fin);
   node.sent = 0;
   node.acked = 0;
   node.data = &fin;
@@ -232,13 +238,22 @@ void * connectionThread(void *arg)
   pthread_create(&node.thread, NULL, sendThread, (void*)&node);
   pthread_join(node.thread, NULL);
 
+  connectionPhase = 4;
   while (connectionPhase == 4)
   {
-    ;
+    if(connectionPhase == 5)
+    {
+        printf("breaking\n");
+      fflush(stdout);
+        break; 
+    }
   }
-  createDataHeader(4, connectionId, 0, windowSize, getCRC(sizeof("FINACK"), "FINACK"), "FINACK", &fin);
+	
+  createDataHeader(4, connectionId, 0, windowSize, getCRC(strlen("FINACK"), "FINACK"), "FINACK", &finack);
   while(connectionPhase == 5)
   {
+      printf("in connection while\n");
+      fflush(stdout);
     connectionPhase = 6;
     //Send synackack to server
     if (sendto(fdSend, &finack, sizeof(DataHeader), 0, (struct sockaddr *)&sendToSock, sizeof(sendToSock)) < 0)
@@ -247,9 +262,11 @@ void * connectionThread(void *arg)
       exit(EXIT_FAILURE);
     }
     printf("finack sent\n");
+      fflush(stdout);
     //wait timer
     clock_t timer = clock() + roundTripTime;
     while (clock() < timer);
+	 // sleep(10);
   }
   close(fdSend);
 
@@ -281,9 +298,11 @@ void * sendThread(void * arg)
         break;
       }
     }
+      ((MsgList*)arg)->sent = 1; 
     //wait timer
     clock_t timer = clock() + roundTripTime;
     while (clock() < timer);
+	//sleep(10);
   }
   return NULL;
 }
@@ -310,8 +329,9 @@ void * receiveThread(void * arg)
 	fflush(stdout);
     bytesReceived = recvfrom(fdReceive, &buffer, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, &addrlen);
     //Add check for address that we received from
-	  printf("msg from recv: %s", buffer.data);
-    if (bytesReceived > 0 && (calcError(buffer.crc, sizeof(buffer.data), buffer.data)) == 0)
+	  printf("flag: %d. msg from recv: %s\n", buffer.flag, buffer.data);
+	  printf("connectionPhase: %d\n", connectionPhase);
+    if (bytesReceived > 0 && (calcError(buffer.crc, strlen(buffer.data), buffer.data)) == 0)
     {
       switch (buffer.flag)
       {
@@ -347,12 +367,20 @@ void * receiveThread(void * arg)
         case 2:
           //MSGACK
           //check connectionId if 0 then dont do stuff if not 0 do stuff
+			  printf("msg ack goten \n");
+			  fflush(stdout);
           if(connectionPhase == 2 && head != NULL)
           {
+			  printf("yes \n");
+			  fflush(stdout);
             while (1)
             {
+				printf("blw \n");
+			  fflush(stdout);
               if (pthread_mutex_trylock(&mutex))
               {
+				  printf("set ack \n");
+			  fflush(stdout);
                 setAck(head, buffer.seq, windowSize);
                 head = removeFirstUntilNotAcked(head, &sendPermission);
                 pthread_mutex_unlock(&mutex);

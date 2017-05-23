@@ -13,8 +13,6 @@ void createDataHeader(int flag, int id, int seq, int windowSize, int crc, char *
 //AcceptedClientlist
 void addClient(AccClientListHead * head, struct sockaddr_in remaddr, int id )
 {
-	printf("Mwoa\n");
-	fflush(stdout);
 	//AcceptedClients * temp;
 	
 	AcceptedClients * toAdd;
@@ -39,32 +37,23 @@ void addClient(AccClientListHead * head, struct sockaddr_in remaddr, int id )
 	head->head = toAdd; 
 	//head->head->syn = (pthread_t *)malloc(sizeof(pthread_t));
 	
-	
-	printf("done\n");
-	fflush(stdout);
 }
 
 AcceptedClients * findClient(AcceptedClients * client, struct sockaddr_in remaddr, int id )
 {
-	printf("huh?\n");
-	fflush(stdout);
+
 	if(client == NULL)
 	{
-		printf("client null\n");
-		fflush(stdout);
 		return NULL; 
 	}
 	if(client->remaddr.sin_addr.s_addr == remaddr.sin_addr.s_addr && client->id == id)
 	{
-		printf("client found\n");
-		fflush(stdout);
+	
 		return client; 
 	}
 	else
 	{
-		printf("you turn me right round bby right round\n");
-		fflush(stdout);
-		return findClient( client->next, remaddr, id ); 
+			return findClient( client->next, remaddr, id ); 
 	}
 	printf("oh nooooooo\n");
 	fflush(stdout);
@@ -119,6 +108,9 @@ void addMsgToClient(AcceptedClients * client, DataHeader * msg)
 	ClientMsgList * temp; 
 	if (client->msgs == NULL)
 	{
+		printf("first msg added\n");
+		fflush(stdout); 
+		client->msgs = (ClientMsgList * )malloc(sizeof(ClientMsgList)); 
 		client->msgs->seq = msg->seq;
 		strcpy(client->msgs->data, msg->data);
 		client->msgs->next = NULL; 
@@ -128,7 +120,11 @@ void addMsgToClient(AcceptedClients * client, DataHeader * msg)
 	}
 	else 
 	{
+		printf("other msg added\n");
+		fflush(stdout); 
 		temp = client->msgs; 
+		client->msgs = NULL; 
+		client->msgs = (ClientMsgList * )malloc(sizeof(ClientMsgList));
 		client->msgs->seq = msg->seq;
 		strcpy(client->msgs->data, msg->data);
 		temp->prev = client->msgs; 
@@ -139,12 +135,18 @@ void addMsgToClient(AcceptedClients * client, DataHeader * msg)
 
 ClientMsgList * findTheFirstMsg(ClientMsgList * msg)
 {
+	printf("in find\n");
+	fflush(stdout); 
 	if(msg == NULL)
 	{
+		printf("its null\n");
+		fflush(stdout); 
 		return NULL; 
 	}
 	else if (msg->last == 1)
 	{
+		printf("its not null\n");
+		fflush(stdout); 
 		return msg; 
 	}
 	else 
@@ -156,12 +158,26 @@ ClientMsgList * findTheFirstMsg(ClientMsgList * msg)
 
 void printMsg(ClientMsgList * firstMsg)//firstMsg = client->msgs
 {
+	printf("in printMsg\n");
+	fflush(stdout); 
 	ClientMsgList * msg = findTheFirstMsg(firstMsg);
+	printf("in after findTheFirstMsg\n");
+	fflush(stdout); 
 	int seq = msg->seq; 
 	
 	printf("------- Message Recived -------\n");
-	printf ("\n%s ", msg->data); 
-	
+	if(msg != NULL)
+	{
+		printf ("Its not null\n "); 
+		fflush(stdout); 
+		printf ("\n%s ", msg->data); 
+		fflush(stdout); 
+	}
+	else
+	{
+		printf("msg == NULL\n");
+		fflush(stdout); 
+	}
 	while(msg != NULL)
 	{
 		
@@ -170,6 +186,8 @@ void printMsg(ClientMsgList * firstMsg)//firstMsg = client->msgs
 		printf ("%s ", msg->data); 
 		
 	}
+	printf("\n");
+		fflush(stdout); 
 
 }
 
@@ -204,8 +222,8 @@ ClientMsgList * getMsgToPrint (ClientMsgList * msg, int seq)
 
 
 
-//ListFuncs
-
+//ListFuncs - Tabort dessa
+/*
 ListHead * createListHead()
 {
 	ListHead * head; 
@@ -270,34 +288,41 @@ int searchList(ListNode * node, int seqNr)
 		searchList(node->next, seqNr);
 	}
 	return -35;
-}
+}*/
 //////////////////////////MsgListOperations////////////////////////////////////////////////////////////////////
 void setAck(MsgList * head, int seq, int windowSize)
 {
 	int i;
-
+//lägg till nod
+	MsgList * Node = head; 
 	for(i = 0; i<windowSize; i++)
 	{
+		printf("setAck forLoop %d\n", i);
+				  fflush(stdout);
 		//TODO: mutex stuff
-		if(head->data->seq == seq && head->sent)
+		if(Node->data->seq == seq && Node->sent)
 		{
-			pthread_cancel(head->thread);
-			head->acked = 1;
+			printf("funkar ej? \n");
+				  fflush(stdout);
+			//funkar ej ?
+			pthread_cancel(Node->thread);
+			Node->acked = 1;
 			break;
 		}
-		else if(head->next != NULL)
+		else if(Node->next != NULL)
 		{
-			head = head->next;
+			Node = Node->next;
 		}
 	}
 }
 
-void createMessages(MsgList *head, int id, int seqStart, int windowSize)
+MsgList *createMessages(MsgList *head, int id, int seqStart, int windowSize)
 {
 	int msgLength = 0;
 	int i;
-	char str[10];
-	MsgList *node = head;
+	char str[10];	
+	MsgList *node;
+	MsgList * temp = head;
 
 	printf("Enter number of packages to send to receiver: ");
 	scanf("%d", &msgLength);
@@ -305,15 +330,43 @@ void createMessages(MsgList *head, int id, int seqStart, int windowSize)
 
 	for (i=seqStart; i<msgLength+seqStart; i++)
 	{
+		printf("seq: %d\n", i);
+		fflush(stdout);
 		node =(MsgList*)malloc(sizeof(MsgList));
 		node->sent = 0;
 		node->acked = 0;
 		node->data = (DataHeader*)malloc(sizeof(DataHeader));
 		snprintf(str, sizeof(str), "%d", i);//just helps to set the message to the number of the message
-		createDataHeader(2, id, i, windowSize, getCRC(sizeof(str), str), str, node->data);
+		createDataHeader(2, id, i, windowSize, getCRC(strlen(str), str), str, node->data);
 		node->next = NULL;
-		node = node->next;
+		
+		if(temp == NULL)
+		{
+			printf("nuff\n");
+			fflush(stdout);
+			head = node;
+			temp = head;
+		}
+		
+		else
+		{	
+			while(1)
+			{
+				printf("ha\n");
+				fflush(stdout);
+				if(temp->next == NULL)
+				{
+					printf("buff\n");
+					fflush(stdout);
+					temp->next = node;
+					break;
+				}
+				temp = temp->next;
+			}
+		}
+		
 	}
+	return head; 
 }
 
 MsgList *removeFirstUntilNotAcked(MsgList *head, int *sendPermission)
@@ -324,10 +377,18 @@ MsgList *removeFirstUntilNotAcked(MsgList *head, int *sendPermission)
 	{
 		if(node->acked)
 		{
+			printf("acked\n");
+			fflush(stdout);
 			head = head->next;
-			free(node->data);
-			node->data = NULL;
+			printf("2\n");
+			fflush(stdout);
+			//free(node->data);
+			printf("3\n");
+			fflush(stdout);
+			//node->data = NULL;
 			free(node);
+			printf("4\n");
+			fflush(stdout);
 			node = head;
 			*sendPermission = *sendPermission - 1;
 		}
