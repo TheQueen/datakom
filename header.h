@@ -12,6 +12,7 @@
 #include <time.h>
 
 #define POLY 0x1021
+#define PORT 5555
 
 //transport header
 typedef  struct header
