@@ -1,4 +1,5 @@
 //Receiver
+
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -12,7 +13,7 @@
 #include "header.h"
 
 #define PORT 5555
-#define HOST_NAME_LENGTH 50
+//#define HOST_NAME_LENGTH 50
 //#define BUFSIZE 2048
 #define WINDOWSIZE 3
 
@@ -21,7 +22,6 @@ void * listenFunc(void * args);
 void * handleMsg (void * args);
 int createSock();
 void initSock(int fd, int port);
-//void initSockSendto(struct sockaddr_in *myaddr, int fd, int port, char *host);
 void fillArrWithSeq0(AcceptedClients * client);
 void addToArr(AcceptedClients * client, DataHeader * incommingMsg, int index);
 
@@ -31,9 +31,6 @@ DataHeader window[(WINDOWSIZE-1)];
 //ListHead * head;
 AccClientListHead * clients;
 pthread_mutex_t mutex;
-//////////////////////////////////////////////////////////////////
-socklen_t addrlen = sizeof(struct sockaddr_in);
-int fd;
 
 //void * startUpFunc ()
 int main(int argc, char *argv[])
@@ -42,7 +39,7 @@ int main(int argc, char *argv[])
 	//variables
 	//head = createListHead();
 	pthread_t listener;
-	//ArgForThreads args;
+	ArgForThreads args;
 
 	// if(argv[1] == NULL)
   //   {
@@ -58,26 +55,28 @@ int main(int argc, char *argv[])
 	clients = (AccClientListHead*)malloc(sizeof(AccClientListHead));
 	clients->head = NULL;
 
-	srand(time(NULL));
+  srand(time(NULL));
 
 	//Create socket
-	//args.addrlen = sizeof(args.remaddr);
-	//args.fd = createSock();
-	//initSock(&(args.sock), args.fd, PORT);
+  args.addrlen = sizeof(args.remaddr);
+	if((args.fd = createSock()) == 0)
+	{
+		printf("fd not created\n");
+		exit(EXIT_FAILURE);
+	}
+	initSock(args.fd, PORT);
+  //printf("Socket created and initiated!\n");
 
-	//global fd for sock to use in all communication
-	fd = createSock();
-	initSock(fd, PORT);
 
-	int err = pthread_create(&listener, NULL, listenFunc, NULL);
+	int err = pthread_create(&listener, NULL, listenFunc, &args);
 	if(err != 0)
-	{
-	   printf ("cant create thread\n");
-	}
-	else
-	{
-	   //printf ("Successfully created thread!!!\n");
-	}
+    {
+         printf ("cant create thread\n");
+     }
+     else
+     {
+         //printf ("Successfully created thread!!!\n");
+     }
 
 	pthread_exit(NULL);
 	free(clients);
@@ -87,44 +86,54 @@ int main(int argc, char *argv[])
 
 void * listenFunc(void * args)
 {
-	struct sockaddr_in remaddr;
+	ArgForThreads * bla = NULL;
+
+	struct sockaddr_in senderAddr;
+	socklen_t addrlen = sizeof(senderAddr);
+
 	pthread_t msg;
 	int msgRecv;
-	ArgForThreads *arg = NULL;
 	while (1)
 	{
-		arg = (ArgForThreads *) malloc(sizeof(ArgForThreads));
-		if( arg == NULL)
+		bla = (ArgForThreads *) malloc(sizeof(ArgForThreads));
+		bla  = (ArgForThreads*) args;
+		if( bla == NULL)
 		{
-			printf("args not malloced right in listenFunc\n");
+			printf("FFFFFFFFFFF\n");
 			fflush(stdout);
 		}
-		//arg  = (ArgForThreads*) args; 
-		
+
+
+
 		printf("\n\n\n-----Listening for msgs----- \n\n");
 		fflush(stdout);
-		msgRecv = recvfrom(fd, &(arg->incommingMsg), sizeof(DataHeader), 0, (struct sockaddr *) &remaddr, (socklen_t*)&(addrlen));
+		msgRecv = recvfrom(bla->fd, &(bla->incommingMsg), sizeof(DataHeader), 0, (struct sockaddr *) &senderAddr, (socklen_t*)&(addrlen));
+
+		//error check
 		if (!msgRecv)
 		{
 			printf("Error from listenFunc for msg: %s\n", strerror(errno) );
 			fflush(stdout);
 		}
+
 		else
 		{
-			arg->remaddr = remaddr;
-			//bla->addrlen = addrlen;
-			printf("msg from client: %s\n", arg->incommingMsg.data);
-			printf("seq: %d", arg->incommingMsg.seq);
+			bla->remaddr = senderAddr;
+			bla->addrlen = addrlen;
+			printf("msg from client: %s\n", bla->incommingMsg.data);
+			printf("seq: %d", bla->incommingMsg.seq);
 			fflush(stdout);
-			if((calcError(arg->incommingMsg.crc, strlen(arg->incommingMsg.data), arg->incommingMsg.data)) == 0)
+			if((calcError(bla->incommingMsg.crc, strlen(bla->incommingMsg.data), bla->incommingMsg.data)) == 0)
 			{
-				printf("flag = %d\n", arg->incommingMsg.flag);
+				printf("flag = %d\n", bla->incommingMsg.flag);
 				fflush(stdout);
-				pthread_create(&msg, NULL, handleMsg, arg);
+				pthread_create(&msg, NULL, handleMsg, bla);
 			}
 		}
+
+		//free(bla);
 	}
-	//free(bla);
+
 	//bla = NULL;
 	return (void *) 1;
 }
@@ -137,11 +146,9 @@ void * handleMsg (void * args)
 	int sent;
 	DataHeader * outgoingMsg = (DataHeader *) malloc(sizeof(DataHeader));
 	ArgForThreads * temp = (ArgForThreads*)malloc(sizeof(ArgForThreads));
-	//ArgForThreads * temp;
-	temp = (ArgForThreads*) args;
-	struct sockaddr_in remaddr = temp->remaddr;
 
-	//DETTA SKA INTE BEHÄÖVAS
+	temp = (ArgForThreads*) args;
+
 	DataHeader * incommingMsg = (DataHeader *) malloc (sizeof(DataHeader));
 	incommingMsg->seq = temp->incommingMsg.seq;
 	incommingMsg->flag =  temp->incommingMsg.flag;
@@ -150,12 +157,10 @@ void * handleMsg (void * args)
 	incommingMsg->crc =  temp->incommingMsg.crc;
 	strcpy(incommingMsg->data,temp->incommingMsg.data);
 
-	printf("flag = %d\n", incommingMsg->flag);
-	fflush(stdout);
-
-	//
-	// int sendFd = createSock();
-	// initSockSendto(&tempAddr, sendFd, 5732, hostName);
+					printf("flag = %d\n", incommingMsg->flag);
+				fflush(stdout);
+	//free(args);
+	struct sockaddr_in tempAddr = temp->remaddr;
 
 	unsigned int r = 0;
 	int i;
@@ -196,7 +201,7 @@ void * handleMsg (void * args)
 			if (tempClient != NULL )
 			{
 				createDataHeader(1, tempClient->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg);
-				sent = sendto(fd, outgoingMsg, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, (socklen_t)addrlen);
+				sent = sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen);
 				//error check
 				if (!sent)
 				{
@@ -206,8 +211,10 @@ void * handleMsg (void * args)
 			}
 			else
 			{
+
 				createDataHeader(1, r, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg);
-				sent = sendto(fd, outgoingMsg, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, (socklen_t)addrlen);
+
+				sent = sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen);
 				//error check
 				if (!sent)
 				{
@@ -238,7 +245,7 @@ void * handleMsg (void * args)
 
 			while (tempClient->synAckAck != 1)
 			{
-				sleep(10);
+				sleep(2);
 
 				if(tempClient->synAckAck == 1)
 				{
@@ -254,7 +261,7 @@ void * handleMsg (void * args)
 						fflush(stdout);
 						msg = "This is an SynAck";
 						createDataHeader(1, temp->incommingMsg.id, temp->incommingMsg.seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg);
-						sent = sendto(fd, outgoingMsg, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, (socklen_t)addrlen);
+						sent = sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen);
 						//error check
 						if (!sent)
 						{
@@ -316,8 +323,8 @@ void * handleMsg (void * args)
 			{
 				if(tempClient->synAckAck == 1)
 				{
-					printf("in seq: %d", incommingMsg->seq);
-					printf("expecting seq: %d", tempClient->nextInSeq);
+					printf("in seq: %d\n", incommingMsg->seq);
+					printf("expecting seq: %d\n", tempClient->nextInSeq);
 					fflush(stdout);
 
 					//recv the correct msg
@@ -327,7 +334,7 @@ void * handleMsg (void * args)
 						fflush(stdout);
 						msg = "This is an Ack";
 						createDataHeader(2,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg, outgoingMsg);
-						sent = sendto(fd, outgoingMsg, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, (socklen_t)addrlen);
+						sent = sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen));
 						//error check
 						if (!sent)
 						{
@@ -376,7 +383,7 @@ void * handleMsg (void * args)
 						}
 
 						createDataHeader(2,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg);
-						sent = sendto(fd, outgoingMsg, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, (socklen_t)addrlen);
+						sent = sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen));
 						//error check
 						if (!sent)
 						{
@@ -403,7 +410,7 @@ void * handleMsg (void * args)
 						}
 
 						createDataHeader(2,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg);
-						sent = sendto(fd, outgoingMsg, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, (socklen_t)addrlen);
+						sent = sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen));
 						//error check
 						if (!sent)
 						{
@@ -419,7 +426,7 @@ void * handleMsg (void * args)
 						fflush(stdout);
 						msg = "This is an Ack, i alredy have this one";
 						createDataHeader(2,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg);
-						sent = sendto(fd, outgoingMsg, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, (socklen_t)addrlen);
+						sent = sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen));
 						//error check
 						if (!sent)
 						{
@@ -440,7 +447,7 @@ void * handleMsg (void * args)
 					/*//resend synAck because have not gotten synAckAck, but client thinks that connection is complet
 					msg = "This is an synAck";
 					createDataHeader(1, r, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg, outgoingMsg);
-					sent = sendto(sendFd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen);
+					sent = sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen);
 					//error check
 					if (!sent)
 					{
@@ -479,9 +486,9 @@ void * handleMsg (void * args)
 				fflush(stdout);
 				if(tempClient->synAckAck == 1)
 				{
-					msg = "This is a FinAck";
+					msg = "This is an FinAck";
 					createDataHeader(4,  incommingMsg->id, incommingMsg->seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg , outgoingMsg);
-					sent = sendto(fd, outgoingMsg, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, (socklen_t)addrlen);
+					sent = sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) (temp->addrlen));
 					printf("header sent\n");
 					fflush(stdout);
 					//error check
@@ -499,7 +506,7 @@ void * handleMsg (void * args)
 					while(1)
 					{
 						while (clock() < currentTime);
-						//sleep(10);
+
 						if(tempClient->finAck == 1)
 						{
 							break;
@@ -507,7 +514,7 @@ void * handleMsg (void * args)
 
 						msg = "This is an Fin ";
 						createDataHeader(3,  temp->incommingMsg.id, temp->incommingMsg.seq, WINDOWSIZE, getCRC(strlen(msg), msg), msg, outgoingMsg);
-						sent = sendto(fd, outgoingMsg, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, (socklen_t)addrlen);
+						sendto(temp->fd, outgoingMsg, sizeof(*outgoingMsg), 0 ,  (struct sockaddr *)&tempAddr, (socklen_t) temp->addrlen);
 						printf("resent fin\n");
 						fflush(stdout);
 					}
@@ -530,22 +537,17 @@ void * handleMsg (void * args)
 					break;
 				}
 			}
-
+			tempClient->finAck = 1;
 			printMsg(tempClient->msgs);
-			removeClient(clients,remaddr,incommingMsg->id);
+			removeClient(clients,tempAddr,incommingMsg->id);
 			break;
 	}
 	//free(temp);
 	//free(incommingMsg);
 	//free(outgoingMsg);
-	//close(sendFd);
 	return (void *) 1;
 }
-
-
-
-//Create socket funcs
-
+///////////////////////////////Connection stuff/////////////////////////////////////////////////////////
 int createSock()
 {
 	int fd;
@@ -555,7 +557,6 @@ int createSock()
 	}
 	return fd;
 }
-
 void initSock(int fd, int port)
 {
 	struct sockaddr_in myaddr;	/* our address */
@@ -571,41 +572,8 @@ void initSock(int fd, int port)
 		exit(EXIT_FAILURE);
 	}
 }
-//
-// void initSockSendto(struct sockaddr_in *myaddr, int fd, int port, char *host)
-// {
-//     /* bind to an arbitrary return address */
-//     /* because this is the client side, we don't care about the address */
-//     /* since no application will initiate communication here - it will */
-//     /* just send responses */
-//     /* INADDR_ANY is the IP address and 0 is the socket */
-//     /* htonl converts a long integer (e.g. address) to a network representation */
-//     /* htons converts a short integer (e.g. port) to a network representation */
-//
-//     struct hostent *hp;     /* host information */
-//     /* look up the address of the server given its name */
-//     hp = gethostbyname(host);
-//     if (!hp)
-//     {
-//     	printf("Error from listenFunc for msg: %s\n", strerror(errno) );
-// 			fflush(stdout);
-//     }
-//
-//     memset((char *)myaddr, 0, sizeof(*myaddr));
-//     myaddr->sin_family = AF_INET;
-//     myaddr->sin_addr.s_addr = htonl(INADDR_ANY);
-//     myaddr->sin_port = htons(port);
-//     memcpy((void *)&myaddr->sin_addr, hp->h_addr_list[0], hp->h_length);
-//
-//     // if (bind(fd, (struct sockaddr *)myaddr, sizeof(*myaddr)) < 0)
-//     // {
-//     //     perror("bind failed");
-//     //     exit(EXIT_FAILURE);
-//     //
-//     // }
-// }
-// //SocketFuncs
-
+//SocketFuncs
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //to fill arr with "Empty" dataHeaders
 void fillArrWithSeq0(AcceptedClients * client)
 {
