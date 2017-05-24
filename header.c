@@ -220,6 +220,10 @@ void removeMsg(ClientMsgList * msg)
 
 ClientMsgList * getMsgToPrint (ClientMsgList * msg, int seq)
 {
+	if(msg == NULL)
+	{
+		return NULL;
+	}
 	if(msg->seq == (seq+1))
 	{
 		return msg; 
