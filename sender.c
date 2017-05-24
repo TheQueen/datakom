@@ -21,8 +21,9 @@ char *server = "127.0.0.1";	/* change this to use a different server */
 int sendPermission = 0;
 int connectionId = 0;
 int windowSize = 0;
-int seqStart = 0;                                     //TODO: set this if I want
+int seqStart = 0;          //TODO: set this if I want
 int connectionPhase = 0;
+int wrong = 0; 
 MsgList node;
 pthread_mutex_t mutex;
 
@@ -239,6 +240,7 @@ void * connectionThread(void *arg)
 
 void * sendThread(void * arg)
 {
+    int crc = ((MsgList*)arg)->data->crc; 
   int type = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	if (type != 0)
 	{
@@ -248,6 +250,7 @@ void * sendThread(void * arg)
   {
     while (1)
     {
+        wrong = wrong +1; 
          if(((MsgList*)arg)->acked != 0)
         {
             break;
@@ -256,6 +259,11 @@ void * sendThread(void * arg)
       {
         if((MsgList*)arg != NULL)
         {
+            if(wrong % 2)
+            {
+                ((MsgList*)arg)->data->crc = 404; 
+                printf("wrong crc\n");
+            }
           if (sendto(fd, ((MsgList*)arg)->data, sizeof(DataHeader), 0, (struct sockaddr *)&remaddr, addrlen) < 0)
           {
             printf("send failed\n");
@@ -263,6 +271,7 @@ void * sendThread(void * arg)
           }
         }
         pthread_mutex_unlock(&mutex);
+          ((MsgList*)arg)->data->crc = crc; 
         break;
       }
        

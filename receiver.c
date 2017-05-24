@@ -90,7 +90,7 @@ void * listenFunc(void * args)
 
 	struct sockaddr_in senderAddr;
 	socklen_t addrlen = sizeof(senderAddr);
-
+int crc;
 	pthread_t msg;
 	int msgRecv;
 	while (1)
@@ -123,7 +123,8 @@ void * listenFunc(void * args)
 			printf("msg from client: %s\n", bla->incommingMsg.data);
 			printf("seq: %d", bla->incommingMsg.seq);
 			fflush(stdout);
-			if((calcError(bla->incommingMsg.crc, strlen(bla->incommingMsg.data), bla->incommingMsg.data)) == 0)
+			crc = (calcError(bla->incommingMsg.crc, strlen(bla->incommingMsg.data), bla->incommingMsg.data)); 
+			if( crc == 0)
 			{
 				printf("flag = %d\n", bla->incommingMsg.flag);
 				fflush(stdout);
@@ -138,6 +139,10 @@ void * listenFunc(void * args)
 				 {
 					 //printf ("Successfully created thread!!!\n");
 				 }
+			}
+			else
+			{
+				printf("wrong crc = %d in seq = %d", crc, bla->incommingMsg.seq); 
 			}
 		}
 	//	sleep(1);
